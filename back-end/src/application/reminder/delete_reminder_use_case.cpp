@@ -1,4 +1,5 @@
 #include "virtual_planner/application/reminder/delete_reminder_use_case.hpp"
+#include "virtual_planner/shared/errors.hpp"
 
 #include <stdexcept>
 
@@ -14,7 +15,7 @@ void DeleteReminderUseCase::execute(std::uint64_t id) const
 {
     if (!repository_.find_by_id(id).has_value())
     {
-        throw std::runtime_error("Lembrete não encontrado.");
+        throw shared::NotFoundError("Lembrete não encontrado.");
     }
 
     repository_.remove(id);

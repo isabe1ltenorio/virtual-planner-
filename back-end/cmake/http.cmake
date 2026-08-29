@@ -36,6 +36,7 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/session_store.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/auth_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/reporting_routes.cpp
+    ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/reminder_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/goal_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/task_routes.cpp
   )

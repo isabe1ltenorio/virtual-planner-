@@ -18,10 +18,14 @@ escrito na P-56.
   `back-end/src/api/http/api_server.cpp`
 - Relatórios: `back-end/include/virtual_planner/api/http/routes/reporting_routes.hpp`
   e `back-end/src/api/http/routes/reporting_routes.cpp`
+- Endpoints de Reminder: `back-end/include/virtual_planner/api/http/routes/reminder_routes.hpp`
+  e `back-end/src/api/http/routes/reminder_routes.cpp`
 - Testes: `back-end/tests/unit/api/json/shared_json_test.cpp` e
   `back-end/tests/integration/api/api_server_test.cpp`; os endpoints de
   relatórios são cobertos por
   `back-end/tests/integration/api/reporting_routes_test.cpp`
+- Testes HTTP de Reminder:
+  `back-end/tests/integration/api/reminder_routes_test.cpp`
 
 A serialização vive em `api`, não em `domain`: o domínio não conhece JSON e não
 depende de `nlohmann/json`. As conversões reaproveitam `domain::to_string` e os
@@ -706,6 +710,103 @@ Exemplo:
 `"recurrence": "Once"`; um lembrete recorrente usa `"Daily"`, `"Weekly"` ou
 `"Monthly"`. A recorrência não é inferida de outro campo, e `date` funciona
 como data-âncora da regra recorrente.
+
+## `GET /api/reminders`
+
+Lista as ocorrências de Reminder em uma janela inclusiva. A expansão de
+recorrências é realizada por `ListRemindersUseCase`; a camada HTTP apenas
+converte os parâmetros e serializa o resultado.
+
+| Parâmetro | Obrigatório | Valores/formato |
+|---|---|---|
+| `start_date` | sim | data ISO 8601 `YYYY-MM-DD` |
+| `end_date` | sim | data ISO 8601 `YYYY-MM-DD` |
+| `type` | não | um valor de `ReminderType` |
+| `recurrence` | não | `Once`, `Daily`, `Weekly` ou `Monthly` |
+
+Os filtros opcionais usam semântica AND. A janela inclui `start_date` e
+`end_date`, e uma lista sem resultados responde 200 com `[]`.
+
+Cada item da resposta separa a data-base persistida da ocorrência expandida:
+
+```json
+[
+  {
+    "reminder": {
+      "id": 42,
+      "description": "Reunião semanal",
+      "category": "Work",
+      "date": "2026-08-03",
+      "time_slot": { "start": 540, "end": 600 },
+      "type": "Meeting",
+      "recurrence": "Weekly"
+    },
+    "occurrence_date": "2026-08-10"
+  }
+]
+```
+
+`reminder.date` permanece sendo a data-base da entidade. `occurrence_date`
+existe somente na resposta e não é persistido.
+
+Parâmetros ausentes, datas inválidas, janela invertida ou enums desconhecidos
+respondem 400 com `code = "validation_error"`, conforme a seção de erros.
+
+## `GET /api/reminders/:id`
+
+Retorna **a regra** do lembrete, e não uma ocorrência expandida — é o que a
+tela de edição precisa carregar. A listagem acima expande um recorrente em
+várias ocorrências dentro da janela; aqui a resposta é a entidade em si, com
+`recurrence` e a `date`-âncora.
+
+```http
+GET /api/reminders/42
+```
+
+Responde **200** com a representação JSON de `Reminder`. Um identificador que
+não existe responde **404** com `code = "not_found"`; um que não seja numérico
+responde **400** com `code = "validation_error"`.
+
+## `POST /api/reminders`
+
+Cria um Reminder por meio de `CreateReminderUseCase`. O cliente envia os seis
+campos editáveis, sem `id`:
+
+```json
+{
+  "description": "Revisar paradigmas de C++",
+  "category": "Study",
+  "date": "2026-08-28",
+  "time_slot": { "start": 540, "end": 600 },
+  "type": "Study",
+  "recurrence": "Once"
+}
+```
+
+O ID é gerado pelo repositório. Um eventual `id` presente no body não controla
+o identificador persistido. O sucesso responde 201 com
+`Content-Type: application/json` e o Reminder completo no formato da P-29.3,
+incluindo o ID gerado.
+
+JSON malformado, body que não seja objeto, campo ausente ou valor inválido
+respondem 400 com `code = "validation_error"`.
+
+## `PUT /api/reminders/:id`
+
+Substitui todos os seis campos editáveis por meio de
+`UpdateReminderUseCase`. O body tem o mesmo formato do POST. O ID do path é a
+única autoridade; um eventual `id` no body é ignorado.
+
+O sucesso responde 200 com `Content-Type: application/json` e o Reminder
+completo atualizado. ID de path inválido ou payload inválido respondem 400 com
+`code = "validation_error"`. Reminder inexistente responde 404 com
+`code = "not_found"`.
+
+## `DELETE /api/reminders/:id`
+
+Exclui o Reminder por meio de `DeleteReminderUseCase`. O sucesso responde 204
+sem corpo. ID de path inválido responde 400 com `code = "validation_error"`;
+Reminder inexistente responde 404 com `code = "not_found"`.
 
 ## Exemplo de uso em uma entidade
 

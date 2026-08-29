@@ -19,6 +19,9 @@ target_link_libraries(task_json_test PRIVATE virtual_planner_json)
 if(VIRTUAL_PLANNER_WITH_HTTP)
   virtual_planner_add_test(api_server_test integration/api/api_server_test.cpp)
   target_link_libraries(api_server_test PRIVATE virtual_planner_http)
+
+  virtual_planner_add_test(reminder_routes_test integration/api/reminder_routes_test.cpp)
+  target_link_libraries(reminder_routes_test PRIVATE virtual_planner_http)
   virtual_planner_add_test(
     goal_routes_test
     integration/api/goal_routes_test.cpp

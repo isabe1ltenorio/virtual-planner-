@@ -1,4 +1,5 @@
 #include "virtual_planner/application/reminder/update_reminder_use_case.hpp"
+#include "virtual_planner/shared/errors.hpp"
 
 #include <stdexcept>
 
@@ -17,7 +18,7 @@ void UpdateReminderUseCase::execute(
 
     if (!existing.has_value())
     {
-        throw std::runtime_error("Lembrete não encontrado.");
+        throw shared::NotFoundError("Lembrete não encontrado.");
     }
 
     const domain::Reminder updated{
