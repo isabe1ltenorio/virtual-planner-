@@ -267,6 +267,51 @@ agradável, mas exige fixar a dependência do Asio no `CMakeLists` do projeto, o
 que transfere para nós a manutenção de uma dependência que a própria biblioteca
 deveria resolver.
 
+### ADR-004 — Conflito de horário entre tarefas: alertar, não bloquear (P-24)
+
+- **Status:** Aceita
+- **Data:** 2026-08-29
+- **Issue:** P-24
+
+**Contexto.** `TimeSlot::overlaps` já existe e tem a semântica de adjacência
+travada por teste (`time_slot_test`), mas nada no backend a consome. O planner
+precisa avisar quando duas tarefas do mesmo dia colidem no horário. A issue pede
+uma decisão explícita: **bloquear a criação** de uma tarefa que se sobrepõe a
+outra, ou apenas **alertar**.
+
+**Decisão.** O backend apenas **alerta**. `application::TaskConflictService`
+(em `application/task/`) recebe uma data e devolve os pares de tarefas cujo
+`TimeSlot` se sobrepõe. `CreateTaskUseCase` e `UpdateTaskUseCase` não mudam:
+criar ou editar uma tarefa nunca falha por conflito de horário.
+
+**Motivo.**
+
+1. A entidade `Task` não tem máquina de estados e o domínio permite sobreposição
+   de propósito — duas atividades podem ocupar o mesmo intervalo (algo em
+   segundo plano, um compromisso opcional).
+2. Bloquear exigiria alterar `CreateTaskUseCase` (já entregue em P-20) e definir
+   uma UX de resolução de conflito, que pertence à visualização do planner
+   (P-41). Um serviço de consulta puro é componível: P-41 chama e decide como
+   apresentar.
+3. A própria motivação da issue diz "avisar quando duas atividades colidem".
+
+**Regras do serviço.**
+
+- Compara apenas tarefas cuja data é igual à data pedida.
+- Ignora tarefas `Cancelled` e `Postponed`: não ocupam o horário, então alertar
+  sobre elas seria ruído.
+- Usa `TimeSlot::overlaps` diretamente. Adjacência (fim de uma igual ao início
+  da outra) **não** é conflito.
+- Cada par conflitante aparece uma única vez, na ordem do repositório.
+
+**Fora do escopo.** Conflito tarefa↔lembrete: o contrato `TaskRepository` não
+conhece lembretes e os arquivos de `Reminder` estão fora desta issue. Fica para
+quando houver um consumidor real que precise dos dois.
+
+**Alternativa rejeitada.** Bloquear a criação. Transferiria para o backend uma
+regra de produto ainda não decidida (o que fazer com o conflito: impedir,
+sugerir novo horário, permitir com aviso) e acoplaria P-20 a P-41.
+
 ## Limitações Atuais
 
 - Não há pool de conexões.

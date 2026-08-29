@@ -54,3 +54,9 @@ virtual_planner_add_test(
   change_task_status_use_case_test
   unit/application/task/change_task_status_use_case_test.cpp
 )
+
+# Deteccao de conflito de horario (P-24).
+virtual_planner_add_test(
+  task_conflict_service_test
+  unit/application/task/task_conflict_service_test.cpp
+)

@@ -17,6 +17,7 @@ virtual_planner_add_sources(
   application/task/delete_task_use_case.cpp
   application/task/list_tasks_use_case.cpp
   application/task/change_task_status_use_case.cpp
+  application/task/task_conflict_service.cpp
 )
 
 # Reminder
