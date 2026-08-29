@@ -43,8 +43,7 @@ void ChangeTaskStatusUseCase::execute(const ChangeTaskStatusRequest& request)
             break;
     }
 
-    // TaskRepository nao tem update: save faz upsert pelo id.
-    repository_.save(*task);
+    repository_.update(*task);
 }
 
 } // namespace virtual_planner::application

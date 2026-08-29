@@ -48,21 +48,19 @@ int main()
     VP_EXPECT(tasks.front().status() == domain::TaskStatus::Pending,
               "a newly created task should start as Pending");
 
-    // Segundo create: o id precisa avancar, nao colidir com o primeiro. Sem
-    // isso o upsert de InMemoryTaskRepository sobrescreveria a task 1.
     const auto second_id = create.execute(make_request());
 
     VP_EXPECT(second_id == 2, "second created task should get id 2");
     VP_EXPECT(repository.find_all().size() == 2,
               "repository should contain two tasks after a second creation");
 
-    // Apos remover o maior id, o proximo create reaproveita esse numero: o id
-    // vem sempre de max(ids)+1 sobre o estado atual do repositorio.
+    // O id vem de uma sequencia monotonica do repositorio (ADR-005): remover o
+    // maior id nao o libera para reuso.
     repository.remove(2);
     const auto third_id = create.execute(make_request());
 
-    VP_EXPECT(third_id == 2,
-              "next id is max(existing ids)+1, so it reuses a freed top id");
+    VP_EXPECT(third_id == 3,
+              "ids come from a monotonic sequence, not reused after removal");
 
     return 0;
 }

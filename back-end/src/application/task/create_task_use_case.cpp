@@ -1,27 +1,9 @@
 #include "virtual_planner/application/task/create_task_use_case.hpp"
 
-#include <algorithm>
-
 #include "virtual_planner/domain/entities/task.hpp"
 #include "virtual_planner/domain/enums/task_status.hpp"
 
 namespace virtual_planner::application {
-
-namespace {
-
-std::uint64_t next_id(persistence::TaskRepository& repository)
-{
-    std::uint64_t highest = 0;
-
-    for (const auto& task : repository.find_all())
-    {
-        highest = std::max(highest, task.id());
-    }
-
-    return highest + 1;
-}
-
-} // namespace
 
 CreateTaskUseCase::CreateTaskUseCase(persistence::TaskRepository& repository)
     : repository_(repository)
@@ -30,10 +12,10 @@ CreateTaskUseCase::CreateTaskUseCase(persistence::TaskRepository& repository)
 
 std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request)
 {
-    const std::uint64_t id = next_id(repository_);
-
+    // id 0: o repositorio gera o id real e o devolve. Descricao e time slot
+    // sao validados pelos construtores de Task e TimeSlot.
     const domain::Task task(
-        id,
+        0,
         request.description,
         request.category,
         request.date,
@@ -41,9 +23,7 @@ std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request)
         request.priority,
         domain::TaskStatus::Pending);
 
-    repository_.save(task);
-
-    return id;
+    return repository_.save(task);
 }
 
 } // namespace virtual_planner::application

@@ -20,12 +20,9 @@ struct CreateTaskRequest
     domain::Priority priority;
 };
 
-// Cria uma Task nova, sempre com status Pending.
-//
-// Diferente de Goal, TaskRepository::save nao gera id: e um upsert por id. Por
-// isso o id novo e calculado aqui, a partir do maior id ja existente (1 quando
-// o repositorio esta vazio). A validacao de descricao e de time slot fica com
-// os construtores de Task e TimeSlot, que ja lancam shared::DomainError e
+// Cria uma Task nova, sempre com status Pending, e devolve o id gerado pelo
+// repositorio (ADR-005). A validacao de descricao e de time slot fica com os
+// construtores de Task e TimeSlot, que ja lancam shared::DomainError e
 // std::invalid_argument.
 class CreateTaskUseCase
 {
