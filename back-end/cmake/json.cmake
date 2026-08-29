@@ -34,6 +34,7 @@ if(VIRTUAL_PLANNER_WITH_JSON)
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/json/shared_json.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/json/goal_json.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/json/reminder_json.cpp
+    ${VIRTUAL_PLANNER_SOURCE_DIR}/api/json/task_json.cpp
   )
 
   target_link_libraries(virtual_planner_json

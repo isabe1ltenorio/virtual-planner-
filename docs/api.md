@@ -471,6 +471,71 @@ Remove uma meta pelo identificador.
 Uma remoção bem-sucedida responde **204** sem corpo. Um identificador
 inexistente responde **404** com `code="not_found"`.
 
+## Task
+
+A representação JSON de `Task` reutiliza as conversões compartilhadas de
+`Category`, `Date`, `TimeSlot`, `Priority` e `TaskStatus` definidas em P-29.0.
+
+Exemplo:
+
+```json
+{
+  "id": 5,
+  "description": "Implementar a estrutura do AppShell",
+  "category": "Work",
+  "date": "2026-08-29",
+  "time_slot": {
+    "start": 480,
+    "end": 540
+  },
+  "shift": "Morning",
+  "priority": "High",
+  "status": "Pending"
+}
+```
+
+| Campo | Tipo JSON | Significado |
+|---|---|---|
+| `id` | inteiro sem sinal | Identificador da tarefa |
+| `description` | string | Descrição da tarefa |
+| `category` | string | `Category`, usando a representação compartilhada |
+| `date` | string | Data da tarefa, em ISO 8601 `YYYY-MM-DD` |
+| `time_slot` | objeto | `TimeSlot`, com `start` e `end` em minutos desde a meia-noite |
+| `shift` | string | `Shift` **derivado** de `time_slot.start`; ver abaixo |
+| `priority` | string | `Priority`, usando a representação compartilhada |
+| `status` | string | `TaskStatus`, usando a representação compartilhada |
+
+### Agendamento: intervalo e turno
+
+`Task` tem **uma** forma de agendamento no domínio — o `time_slot`. O turno
+(`shift`) não é um campo da entidade: ele é **derivado** do início do
+`time_slot`, com os mesmos limites de `reporting::shift_of`:
+
+| `shift` | Faixa de `time_slot.start` |
+|---|---|
+| `"Morning"` | `[00:00, 12:00)` — `start` em `[0, 720)` |
+| `"Afternoon"` | `[12:00, 18:00)` — `start` em `[720, 1080)` |
+| `"Evening"` | `[18:00, 24:00)` — `start` em `[1080, 1440)` |
+
+Regras do formato, para não haver ambiguidade sobre qual campo manda:
+
+- Na **saída** (`to_json`), `shift` está sempre presente e é sempre coerente com
+  `time_slot`. É um rótulo de leitura; o `time_slot` é a fonte de verdade.
+- Na **entrada** (`task_from_json`), `time_slot` é obrigatório. `shift` é
+  opcional: se vier, precisa ser igual ao turno derivado de `time_slot`, senão
+  o payload é rejeitado com **400**. Nunca se usa `shift` para inferir horário.
+
+Um agendamento "por turno" — sem horário exato — depende de `Task` ter turno
+nativo (lacuna A da P-62 / #34, ainda não entregue). Enquanto isso, uma tarefa
+de manhã é simplesmente uma tarefa cujo `time_slot` começa antes das 12:00.
+
+Funções:
+
+```cpp
+nlohmann::json to_json(const domain::Task& task);
+domain::Task task_from_json(const nlohmann::json& value);
+```
+
 ## Reminder
 
 A representação JSON de `Reminder` reutiliza as conversões compartilhadas de
