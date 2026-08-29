@@ -28,3 +28,29 @@ virtual_planner_add_test(
   task_test
   unit/domain/entities/task_test.cpp
 )
+
+# Casos de uso da camada de aplicacao (P-20).
+virtual_planner_add_test(
+  create_task_use_case_test
+  unit/application/task/create_task_use_case_test.cpp
+)
+
+virtual_planner_add_test(
+  update_task_use_case_test
+  unit/application/task/update_task_use_case_test.cpp
+)
+
+virtual_planner_add_test(
+  delete_task_use_case_test
+  unit/application/task/delete_task_use_case_test.cpp
+)
+
+virtual_planner_add_test(
+  list_tasks_use_case_test
+  unit/application/task/list_tasks_use_case_test.cpp
+)
+
+virtual_planner_add_test(
+  change_task_status_use_case_test
+  unit/application/task/change_task_status_use_case_test.cpp
+)

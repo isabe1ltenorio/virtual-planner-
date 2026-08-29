@@ -11,7 +11,13 @@ virtual_planner_add_sources(
 )
 
 # Task
-# virtual_planner_add_sources(application/task/...)
+virtual_planner_add_sources(
+  application/task/create_task_use_case.cpp
+  application/task/update_task_use_case.cpp
+  application/task/delete_task_use_case.cpp
+  application/task/list_tasks_use_case.cpp
+  application/task/change_task_status_use_case.cpp
+)
 
 # Reminder
 virtual_planner_add_sources(
