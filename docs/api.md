@@ -536,6 +536,73 @@ nlohmann::json to_json(const domain::Task& task);
 domain::Task task_from_json(const nlohmann::json& value);
 ```
 
+### Endpoints de Task
+
+Os endpoints de Task reutilizam a representação JSON acima. Erros de domínio
+seguem o mapeamento único de [Erros](#erros): `400` para validação, `404` para
+não encontrado, `500` genérico.
+
+| Método e rota | Resposta |
+| --- | --- |
+| `GET /api/tasks` | **200** com um array de tarefas (ver filtros abaixo) |
+| `GET /api/tasks/:id` | **200** com a tarefa; **404** se o id não existe |
+| `POST /api/tasks` | **201** com a tarefa criada e header `Location: /api/tasks/:id` |
+| `PATCH /api/tasks/:id` | **200** com a tarefa atualizada; **404** se o id não existe |
+| `PATCH /api/tasks/:id/status` | **200** com a tarefa; **404** se o id não existe |
+| `DELETE /api/tasks/:id` | **204** sem corpo; **404** se o id não existe |
+
+#### `GET /api/tasks`
+
+Lista as tarefas. Todos os filtros são passados por query string, são
+**opcionais** e combinam com **E**: uma tarefa só entra na resposta se atende a
+todos os filtros informados. Sem nenhum filtro, retorna todas.
+
+| Parâmetro | Valor | Efeito |
+| --- | --- | --- |
+| `start_date` | `Date` ISO 8601 `YYYY-MM-DD` | mantém tarefas com `date >= start_date` |
+| `end_date` | `Date` ISO 8601 `YYYY-MM-DD` | mantém tarefas com `date <= end_date` |
+| `category` | `Category` | mantém tarefas dessa categoria |
+| `priority` | `Priority` | mantém tarefas dessa prioridade |
+| `status` | `TaskStatus` | mantém tarefas nesse status |
+
+`start_date` e `end_date` formam um intervalo inclusivo; cada limite pode
+aparecer sozinho. Se os dois vierem e `start_date > end_date`, a resposta é
+**400**. Um valor que não corresponde a nenhum enum, ou uma data inexistente
+(`2026-02-30`), também responde **400** com `code="validation_error"`.
+
+#### `POST /api/tasks`
+
+Cria uma tarefa. Corpo:
+
+```json
+{
+  "description": "Implementar a estrutura do AppShell",
+  "category": "Work",
+  "date": "2026-08-29",
+  "time_slot": { "start": 480, "end": 540 },
+  "priority": "High"
+}
+```
+
+Os cinco campos são obrigatórios. `id` não é aceito (é gerado pelo repositório)
+e `status` também não: toda tarefa nova nasce `"Pending"`. `shift` é derivado e
+não é lido na entrada. Um campo faltando, um valor de enum inválido, um
+`time_slot` que viola as invariantes ou um JSON malformado respondem **400**.
+
+#### `PATCH /api/tasks/:id`
+
+Atualização parcial. Aceita qualquer subconjunto de `description`, `category`,
+`date`, `time_slot` e `priority`; os campos omitidos são preservados. `status`
+**não** é alterado por aqui — use `PATCH /api/tasks/:id/status`. `shift` no
+corpo é ignorado.
+
+#### `PATCH /api/tasks/:id/status`
+
+Corpo `{ "status": "Executed" }`. `status` é obrigatório e aceita qualquer valor
+de `TaskStatus` (`"Pending"`, `"Executed"`, `"PartiallyExecuted"`,
+`"Cancelled"`, `"Postponed"`); não há máquina de estados. Um valor inválido ou
+o campo ausente respondem **400**.
+
 ## Reminder
 
 A representação JSON de `Reminder` reutiliza as conversões compartilhadas de

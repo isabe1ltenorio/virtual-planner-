@@ -24,4 +24,9 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     integration/api/goal_routes_test.cpp
   )
   target_link_libraries(goal_routes_test PRIVATE virtual_planner_http)
+  virtual_planner_add_test(
+    task_routes_test
+    integration/api/task_routes_test.cpp
+  )
+  target_link_libraries(task_routes_test PRIVATE virtual_planner_http)
 endif()

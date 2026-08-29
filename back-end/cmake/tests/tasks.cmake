@@ -36,6 +36,11 @@ virtual_planner_add_test(
 )
 
 virtual_planner_add_test(
+  get_task_use_case_test
+  unit/application/task/get_task_use_case_test.cpp
+)
+
+virtual_planner_add_test(
   update_task_use_case_test
   unit/application/task/update_task_use_case_test.cpp
 )
