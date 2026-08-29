@@ -5,12 +5,14 @@
 // nao provaria o criterio de aceite: o que precisa ficar demonstrado e que a
 // aplicacao sobe e responde, com e sem banco.
 #include "virtual_planner/api/http/api_server.hpp"
+#include "virtual_planner/api/http/routes/auth_routes.hpp"
 #include "virtual_planner/api/http/error_response.hpp"
 #include "virtual_planner/api/http/server_config.hpp"
 #include "virtual_planner/interfaces/logger.hpp"
 #include "virtual_planner/persistence/memory/repositories.hpp"
 #include "virtual_planner/persistence/repository_set.hpp"
 #include "virtual_planner/shared/errors.hpp"
+#include "support/authenticated_client.hpp"
 #include "support/expect.hpp"
 #include "virtual_planner/shared/errors.hpp"
 
@@ -263,12 +265,32 @@ int main()
     // --- Rota desconhecida --------------------------------------------------
     {
         http_api::ApiServer server{config, repositories, nullptr, logger};
+        http_api::register_auth_routes(server);
 
         with_running_server(server, [](httplib::Client& client) {
-            const auto response = client.Get("/api/does-not-exist");
+            // Sem sessao, o gate responde antes do roteamento. E deliberado
+            // que a resposta seja 401 e nao 404: um 404 para rota inexistente
+            // e 401 para rota existente deixaria qualquer anonimo mapear a
+            // superficie da API so variando o caminho.
+            const auto anonymous = client.Get("/api/does-not-exist");
 
-            VP_EXPECT(static_cast<bool>(response), "an unknown route should answer");
-            VP_EXPECT(response->status == 404, "an unknown route should answer 404");
+            VP_EXPECT(static_cast<bool>(anonymous),
+                      "an unknown route should answer");
+            VP_EXPECT(anonymous->status == 401,
+                      "an unauthenticated request must not reveal whether the "
+                      "route exists");
+
+            // Autenticado, o 404 volta a ser 404.
+            const auto user = testing::register_and_login(
+                client, "route-probe@example.com", "Prober");
+            testing::authenticate_as(client, user);
+
+            const auto authenticated = client.Get("/api/does-not-exist");
+
+            VP_EXPECT(static_cast<bool>(authenticated),
+                      "an unknown route should answer for an authenticated caller");
+            VP_EXPECT(authenticated->status == 404,
+                      "an authenticated request to an unknown route should answer 404");
         });
     }
 
@@ -421,6 +443,7 @@ int main()
     // --- Mapeamento de erro de dominio para HTTP (issue #31) -----------------
     {
         http_api::ApiServer server{config, repositories, nullptr, logger};
+        http_api::register_auth_routes(server);
 
         // Estas rotas existem so no teste e usam exatamente o seam que os
         // donos de modulo vao usar: lancar o erro certo, sem try/catch.
@@ -442,6 +465,12 @@ int main()
         });
 
         with_running_server(server, [](httplib::Client& client) {
+            // O gate de sessao roda antes do roteamento: sem cookie estas
+            // rotas responderiam 401 e o mapeamento nunca seria exercitado.
+            const auto user = testing::register_and_login(
+                client, "errors@example.com", "Errors");
+            testing::authenticate_as(client, user);
+
             const auto domain_error = client.Get("/throws/domain");
             VP_EXPECT(domain_error->status == 400, "DomainError deve virar 400");
             VP_EXPECT(domain_error->get_header_value("Content-Type") == "application/json",
@@ -565,6 +594,7 @@ int main()
     // --- Limite de corpo: uma requisicao nao derruba o processo -------------
     {
         http_api::ApiServer server{config, repositories, nullptr, logger};
+        http_api::register_auth_routes(server);
 
         // Rota que so existe neste teste: ela nao pode nem ser alcancada, o
         // corpo tem de ser recusado antes de chegar ao handler.
@@ -578,6 +608,11 @@ int main()
             });
 
         with_running_server(server, [&handler_reached](httplib::Client& client) {
+            const auto user = testing::register_and_login(
+                client, "payload@example.com", "Payload");
+            testing::authenticate_as(client, user);
+            handler_reached = false;
+
             // Abaixo do teto de 1 MiB: passa e chega no handler.
             const std::string small(64 * 1024, 'x');
             const auto accepted =

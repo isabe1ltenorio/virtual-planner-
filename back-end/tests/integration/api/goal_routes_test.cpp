@@ -1,4 +1,5 @@
 #include "virtual_planner/api/http/api_server.hpp"
+#include "virtual_planner/api/http/routes/auth_routes.hpp"
 #include "virtual_planner/api/http/routes/goal_routes.hpp"
 #include "virtual_planner/core/app_config.hpp"
 #include "virtual_planner/domain/entities/goal.hpp"
@@ -6,12 +7,16 @@
 #include "virtual_planner/persistence/memory/repositories.hpp"
 #include "virtual_planner/persistence/repository_set.hpp"
 
+#include "support/authenticated_client.hpp"
 #include "support/expect.hpp"
 
 #include <nlohmann/json.hpp>
 
+#include <cstdint>
+#include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 using namespace virtual_planner;
 namespace http_api = virtual_planner::api::http;
@@ -65,33 +70,6 @@ int main()
     persistence::InMemoryReminderRepository reminders;
     persistence::InMemoryUserRepository users;
 
-    const std::uint64_t goal_id = goals.save(
-        domain::Goal{
-            0,
-            "Study C++",
-            domain::Category::Study,
-            domain::GoalStatus::InProgress,
-            domain::GoalPeriod::Weekly,
-            domain::Date{5, 8, 2026}});
-
-    goals.save(
-        domain::Goal{
-            0,
-            "Finish Planner",
-            domain::Category::Work,
-            domain::GoalStatus::InProgress,
-            domain::GoalPeriod::Monthly,
-            domain::Date{20, 8, 2026}});
-    const std::uint64_t deletable_goal_id =
-    goals.save(
-        domain::Goal{
-            0,
-            "Goal to delete",
-            domain::Category::Study,
-            domain::GoalStatus::InProgress,
-            domain::GoalPeriod::Weekly,
-            domain::Date{25, 8, 2026}});
-
     persistence::RepositorySet repositories{
         &goals,
         &tasks,
@@ -110,11 +88,47 @@ int main()
         nullptr,
         logger};
 
+    http_api::register_auth_routes(server);
     http_api::register_goal_routes(server);
 
     with_running_server(
         server,
-        [goal_id, deletable_goal_id](httplib::Client& client) {            // GET existente -> 200
+        [&goals](httplib::Client& client) {
+            // O gate de sessao recusa qualquer rota de Goal sem cookie: o
+            // primeiro passo de todo teste passa a ser existir como usuario.
+            const auto alice =
+                testing::register_and_login(client, "alice@example.com", "Alice");
+            testing::authenticate_as(client, alice);
+
+            const auto make_goal = [](std::string description,
+                                      domain::Category category,
+                                      domain::GoalPeriod period,
+                                      domain::Date reference_date) {
+                return domain::Goal{
+                    0,
+                    std::move(description),
+                    category,
+                    domain::GoalStatus::InProgress,
+                    period,
+                    reference_date};
+            };
+
+            const std::uint64_t goal_id = goals.save(
+                make_goal("Study C++", domain::Category::Study,
+                          domain::GoalPeriod::Weekly, domain::Date{5, 8, 2026}),
+                alice.id);
+
+            goals.save(
+                make_goal("Finish Planner", domain::Category::Work,
+                          domain::GoalPeriod::Monthly, domain::Date{20, 8, 2026}),
+                alice.id);
+
+            const std::uint64_t deletable_goal_id = goals.save(
+                make_goal("Goal to delete", domain::Category::Study,
+                          domain::GoalPeriod::Weekly, domain::Date{25, 8, 2026}),
+                alice.id);
+
+            // GET existente -> 200
             const auto response =
                 client.Get("/api/goals/" + std::to_string(goal_id));
 
@@ -447,6 +461,70 @@ int main()
                 missing_delete_body.at("error").at("code") ==
                     "not_found",
                 "deleting a missing goal should use not_found");
+
+            // --- Isolamento entre usuarios (issue #112) --------------------
+            //
+            // Bob se autentica no mesmo servidor e tenta alcancar a meta da
+            // Alice pelo id, que ele conhece. Toda resposta tem de ser
+            // indistinguivel de "nao existe": um 403 confirmaria a ele que
+            // aquele id esta em uso.
+            const auto bob =
+                testing::register_and_login(client, "bob@example.com", "Bob");
+            testing::authenticate_as(client, bob);
+
+            const std::string alice_path =
+                "/api/goals/" + std::to_string(goal_id);
+
+            const auto bob_reads = client.Get(alice_path);
+            VP_EXPECT(static_cast<bool>(bob_reads),
+                      "reading another user's goal should answer");
+            VP_EXPECT(bob_reads->status == 404,
+                      "reading another user's goal should answer 404");
+
+            const nlohmann::json hijack{{"description", "Hijacked"}};
+
+            const auto bob_updates =
+                client.Patch(alice_path, hijack.dump(), "application/json");
+            VP_EXPECT(static_cast<bool>(bob_updates),
+                      "updating another user's goal should answer");
+            VP_EXPECT(bob_updates->status == 404,
+                      "updating another user's goal should answer 404");
+
+            const nlohmann::json hijack_status{{"status", "Failed"}};
+
+            const auto bob_changes_status = client.Patch(
+                alice_path + "/status", hijack_status.dump(), "application/json");
+            VP_EXPECT(static_cast<bool>(bob_changes_status),
+                      "changing another user's goal status should answer");
+            VP_EXPECT(bob_changes_status->status == 404,
+                      "changing another user's goal status should answer 404");
+
+            const auto bob_deletes = client.Delete(alice_path);
+            VP_EXPECT(static_cast<bool>(bob_deletes),
+                      "deleting another user's goal should answer");
+            VP_EXPECT(bob_deletes->status == 404,
+                      "deleting another user's goal should answer 404");
+
+            // A listagem de Bob e vazia, mesmo com metas da Alice na base.
+            const auto bob_list =
+                client.Get("/api/goals?period=monthly&date=2026-08-05");
+            VP_EXPECT(static_cast<bool>(bob_list),
+                      "listing goals should answer for another user");
+            VP_EXPECT(bob_list->status == 200,
+                      "listing goals should answer 200 for another user");
+            VP_EXPECT(nlohmann::json::parse(bob_list->body).empty(),
+                      "another user's goals must not appear in the listing");
+
+            // E a meta da Alice continua intacta depois de todas as tentativas.
+            testing::authenticate_as(client, alice);
+
+            const auto still_there = client.Get(alice_path);
+            VP_EXPECT(static_cast<bool>(still_there) &&
+                          still_there->status == 200,
+                      "the owner should still reach the goal");
+            VP_EXPECT(nlohmann::json::parse(still_there->body)
+                              .at("description") == "Study modern C++",
+                      "refused writes must not have changed the goal");
         });
 
     return 0;

@@ -24,6 +24,7 @@
 #include <ctime>
 
 #include "virtual_planner/api/http/server_config.hpp"
+#include "virtual_planner/api/http/session_store.hpp"
 #include "virtual_planner/core/app_config.hpp"
 #include "virtual_planner/interfaces/logger.hpp"
 #include "virtual_planner/persistence/database.hpp"
@@ -52,6 +53,13 @@ public:
     // Origens de CORS e host/porta padrao. `bind()` sobrescreve host e porta
     // com o que receber, mas as origens vem daqui.
     [[nodiscard]] const ServerConfig& server_config() const noexcept;
+
+    [[nodiscard]] std::optional<std::uint64_t> authenticated_user_id(
+        const httplib::Request& request) const;
+
+    void begin_session(httplib::Response& response, std::uint64_t user_id);
+    void end_session(const httplib::Request& request,
+                     httplib::Response& response);
 
     // Abre a porta sem comecar a servir. Devolve a porta efetiva — util com
     // `ServerConfig::port == 0`, que pede uma porta efemera ao sistema — ou
@@ -89,12 +97,14 @@ private:
 
     // Uma linha por requisicao atendida (issue #71).
     void register_request_log();
+    void register_authentication_gate();
 
     const core::AppConfig& config_;
     persistence::RepositorySet repositories_;
     const persistence::Database* database_;
     interfaces::Logger& logger_;
     ServerConfig server_config_;
+    SessionStore sessions_;
     httplib::Server server_;
 };
 

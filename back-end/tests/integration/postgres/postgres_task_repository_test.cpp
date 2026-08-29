@@ -9,7 +9,12 @@
 
 #include "support/expect.hpp"
 
+#include <cstdint>
+
 using namespace virtual_planner;
+
+// O usuario semeado pela migration 001, dono das linhas deste teste.
+constexpr std::uint64_t kOwner = 1;
 
 namespace
 {
@@ -65,12 +70,12 @@ int main()
             domain::TaskStatus::Pending);
 
         // Act: save()
-        const auto id = repository.save(task);
+        const auto id = repository.save(task, kOwner);
 
         VP_EXPECT(id != 0, "save() must return a non-zero id");
 
         // Assert: find_by_id()
-        auto saved = repository.find_by_id(id);
+        auto saved = repository.find_by_id(id, kOwner);
 
         VP_EXPECT(saved.has_value(), "find_by_id() must return the saved task");
         VP_EXPECT(saved->id() == id, "saved task id must match");
@@ -90,7 +95,7 @@ int main()
                   "end_minutes must round-trip");
 
         // Assert: find_all()
-        const auto all = repository.find_all();
+        const auto all = repository.find_all(kOwner);
 
         VP_EXPECT(
             std::any_of(all.begin(), all.end(),
@@ -110,10 +115,10 @@ int main()
             domain::Priority::Low,
             domain::TaskStatus::Executed);
 
-        repository.update(edited);
+        repository.update(edited, kOwner);
 
         // Assert: update()
-        auto reloaded = repository.find_by_id(id);
+        auto reloaded = repository.find_by_id(id, kOwner);
 
         VP_EXPECT(reloaded.has_value(),
                   "find_by_id() must return the updated task");
@@ -132,9 +137,9 @@ int main()
                   "update() must persist the new start_minutes (evening shift)");
 
         // Cleanup
-        repository.remove(id);
+        repository.remove(id, kOwner);
 
-        VP_EXPECT(!repository.find_by_id(id).has_value(),
+        VP_EXPECT(!repository.find_by_id(id, kOwner).has_value(),
                   "remove() must delete the task");
 
         database.shutdown();

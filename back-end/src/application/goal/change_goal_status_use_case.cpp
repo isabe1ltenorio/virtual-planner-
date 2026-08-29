@@ -12,9 +12,10 @@ ChangeGoalStatusUseCase::ChangeGoalStatusUseCase(
 }
 
 void ChangeGoalStatusUseCase::execute(
-    const ChangeGoalStatusRequest& request)
+    const ChangeGoalStatusRequest& request,
+    std::uint64_t user_id)
 {
-    auto goal = repository_.find_by_id(request.id);
+    auto goal = repository_.find_by_id(request.id, user_id);
 
     if (!goal.has_value())
     {
@@ -41,7 +42,7 @@ void ChangeGoalStatusUseCase::execute(
             break;
     }
 
-    repository_.update(*goal);
+    repository_.update(*goal, user_id);
 }
 
 } // namespace virtual_planner::application

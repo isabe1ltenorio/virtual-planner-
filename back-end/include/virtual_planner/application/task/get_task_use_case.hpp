@@ -13,7 +13,8 @@ public:
     explicit GetTaskUseCase(persistence::TaskRepository& repository);
 
     // Lanca shared::NotFoundError quando nao existe Task com o id pedido.
-    [[nodiscard]] domain::Task execute(std::uint64_t id) const;
+    [[nodiscard]] domain::Task execute(std::uint64_t id,
+                                       std::uint64_t user_id) const;
 
 private:
     persistence::TaskRepository& repository_;

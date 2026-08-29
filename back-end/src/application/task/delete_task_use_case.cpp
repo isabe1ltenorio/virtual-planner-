@@ -10,16 +10,16 @@ DeleteTaskUseCase::DeleteTaskUseCase(persistence::TaskRepository& repository)
 {
 }
 
-void DeleteTaskUseCase::execute(std::uint64_t id)
+void DeleteTaskUseCase::execute(std::uint64_t id, std::uint64_t user_id)
 {
-    auto task = repository_.find_by_id(id);
+    auto task = repository_.find_by_id(id, user_id);
 
     if (!task.has_value())
     {
         throw shared::NotFoundError("Task not found.");
     }
 
-    repository_.remove(id);
+    repository_.remove(id, user_id);
 }
 
 } // namespace virtual_planner::application

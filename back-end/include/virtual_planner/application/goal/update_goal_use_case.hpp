@@ -29,7 +29,8 @@ public:
     explicit UpdateGoalUseCase(
         persistence::GoalRepository& repository);
 
-    void execute(const UpdateGoalRequest& request);
+    void execute(const UpdateGoalRequest& request,
+                 std::uint64_t user_id);
 
 private:
     persistence::GoalRepository& repository_;

@@ -1,4 +1,5 @@
 #include "virtual_planner/api/http/api_server.hpp"
+#include "virtual_planner/api/http/routes/auth_routes.hpp"
 #include "virtual_planner/api/http/routes/task_routes.hpp"
 #include "virtual_planner/core/app_config.hpp"
 #include "virtual_planner/domain/entities/task.hpp"
@@ -6,6 +7,7 @@
 #include "virtual_planner/persistence/memory/repositories.hpp"
 #include "virtual_planner/persistence/repository_set.hpp"
 
+#include "support/authenticated_client.hpp"
 #include "support/expect.hpp"
 
 #include <nlohmann/json.hpp>
@@ -73,31 +75,6 @@ int main()
     persistence::InMemoryReminderRepository reminders;
     persistence::InMemoryUserRepository users;
 
-    const domain::TimeSlot morning{std::chrono::hours{8}, std::chrono::hours{9}};
-    const domain::TimeSlot mid_morning{
-        std::chrono::hours{9}, std::chrono::hours{10}};
-    const domain::TimeSlot late_morning{
-        std::chrono::hours{10}, std::chrono::hours{11}};
-    const domain::TimeSlot afternoon{
-        std::chrono::hours{14}, std::chrono::hours{15}};
-
-    // A: 05/08 Work/High/Executed
-    tasks.save(task(domain::Date{5, 8, 2026}, domain::Category::Work,
-                    domain::Priority::High, domain::TaskStatus::Executed,
-                    morning));
-    // B: 10/08 Study/High/Pending
-    const std::uint64_t task_b = tasks.save(
-        task(domain::Date{10, 8, 2026}, domain::Category::Study,
-             domain::Priority::High, domain::TaskStatus::Pending, mid_morning));
-    // C: 20/08 Work/High/Executed  -- alvo do filtro combinado
-    const std::uint64_t task_c = tasks.save(
-        task(domain::Date{20, 8, 2026}, domain::Category::Work,
-             domain::Priority::High, domain::TaskStatus::Executed, late_morning));
-    // D: 25/08 Work/Low/Pending  -- usada no DELETE
-    const std::uint64_t task_d = tasks.save(
-        task(domain::Date{25, 8, 2026}, domain::Category::Work,
-             domain::Priority::Low, domain::TaskStatus::Pending, afternoon));
-
     persistence::RepositorySet repositories{&goals, &tasks, &reminders, &users};
 
     SilentLogger logger;
@@ -107,9 +84,41 @@ int main()
 
     http_api::ApiServer server{config, repositories, nullptr, logger};
 
+    http_api::register_auth_routes(server);
     http_api::register_task_routes(server);
 
     with_running_server(server, [&](httplib::Client& client) {
+        // O gate de sessao recusa 401 toda rota de dominio. As Tasks so
+        // podem ser semeadas depois de existir um dono para elas.
+        const auto alice =
+            testing::register_and_login(client, "alice@example.com", "Alice");
+        testing::authenticate_as(client, alice);
+
+        const domain::TimeSlot morning{std::chrono::hours{8}, std::chrono::hours{9}};
+        const domain::TimeSlot mid_morning{
+            std::chrono::hours{9}, std::chrono::hours{10}};
+        const domain::TimeSlot late_morning{
+            std::chrono::hours{10}, std::chrono::hours{11}};
+        const domain::TimeSlot afternoon{
+            std::chrono::hours{14}, std::chrono::hours{15}};
+
+        // A: 05/08 Work/High/Executed
+        tasks.save(task(domain::Date{5, 8, 2026}, domain::Category::Work,
+                        domain::Priority::High, domain::TaskStatus::Executed,
+                        morning), alice.id);
+        // B: 10/08 Study/High/Pending
+        const std::uint64_t task_b = tasks.save(
+            task(domain::Date{10, 8, 2026}, domain::Category::Study,
+                 domain::Priority::High, domain::TaskStatus::Pending, mid_morning), alice.id);
+        // C: 20/08 Work/High/Executed  -- alvo do filtro combinado
+        const std::uint64_t task_c = tasks.save(
+            task(domain::Date{20, 8, 2026}, domain::Category::Work,
+                 domain::Priority::High, domain::TaskStatus::Executed, late_morning), alice.id);
+        // D: 25/08 Work/Low/Pending  -- usada no DELETE
+        const std::uint64_t task_d = tasks.save(
+            task(domain::Date{25, 8, 2026}, domain::Category::Work,
+                 domain::Priority::Low, domain::TaskStatus::Pending, afternoon), alice.id);
+
         // --- GET /api/tasks/:id existente -> 200 ----------------------------
         {
             const auto response =

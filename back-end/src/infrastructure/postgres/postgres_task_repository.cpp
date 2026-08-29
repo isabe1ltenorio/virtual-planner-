@@ -15,11 +15,6 @@ namespace virtual_planner::infrastructure::postgres {
 
 namespace {
 
-// Enquanto a ADR-002 mantiver o sistema single-tenant, este e o dono de tudo;
-// quando houver autenticacao, o valor passa a vir da requisicao e so este
-// ponto muda. Mesma constante de PostgresGoalRepository e
-// PostgresReminderRepository.
-constexpr std::uint64_t kSingleTenantUserId{1};
 
 domain::Task task_from_row(const pqxx::row_ref& row)
 {
@@ -47,7 +42,8 @@ PostgresTaskRepository::PostgresTaskRepository(PostgresDatabase& database)
 
 // O id vem da identity da tabela (migration 030), nao do chamador: save so
 // insere e devolve o id gerado, como PostgresGoalRepository::save.
-std::uint64_t PostgresTaskRepository::save(const domain::Task& task)
+std::uint64_t PostgresTaskRepository::save(const domain::Task& task,
+                                           std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -69,7 +65,7 @@ std::uint64_t PostgresTaskRepository::save(const domain::Task& task)
         )",
         pqxx::params{
             transaction,
-            kSingleTenantUserId,
+            user_id,
             task.description(),
             domain::to_string(task.category()),
             task.date().year(),
@@ -87,7 +83,8 @@ std::uint64_t PostgresTaskRepository::save(const domain::Task& task)
     return id;
 }
 
-void PostgresTaskRepository::update(const domain::Task& task)
+void PostgresTaskRepository::update(const domain::Task& task,
+                                    std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -117,13 +114,13 @@ void PostgresTaskRepository::update(const domain::Task& task)
             domain::to_string(task.priority()),
             domain::to_string(task.status()),
             task.id(),
-            kSingleTenantUserId}).no_rows();
+            user_id}).no_rows();
 
     transaction.commit();
 }
 
 std::optional<domain::Task>
-PostgresTaskRepository::find_by_id(std::uint64_t id)
+PostgresTaskRepository::find_by_id(std::uint64_t id, std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(database_.connection());
 
@@ -143,7 +140,7 @@ PostgresTaskRepository::find_by_id(std::uint64_t id)
             FROM tasks
             WHERE id = $1 AND user_id = $2
         )",
-        pqxx::params{transaction, id, kSingleTenantUserId});
+        pqxx::params{transaction, id, user_id});
 
     if (result.empty())
     {
@@ -154,7 +151,7 @@ PostgresTaskRepository::find_by_id(std::uint64_t id)
 }
 
 std::vector<domain::Task>
-PostgresTaskRepository::find_all()
+PostgresTaskRepository::find_all(std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(database_.connection());
 
@@ -175,7 +172,7 @@ PostgresTaskRepository::find_all()
             WHERE user_id = $1
             ORDER BY id
         )",
-        pqxx::params{transaction, kSingleTenantUserId});
+        pqxx::params{transaction, user_id});
 
     std::vector<domain::Task> tasks;
     tasks.reserve(result.size());
@@ -188,13 +185,13 @@ PostgresTaskRepository::find_all()
     return tasks;
 }
 
-void PostgresTaskRepository::remove(std::uint64_t id)
+void PostgresTaskRepository::remove(std::uint64_t id, std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
     transaction.exec(
         "DELETE FROM tasks WHERE id = $1 AND user_id = $2",
-        pqxx::params{transaction, id, kSingleTenantUserId}).no_rows();
+        pqxx::params{transaction, id, user_id}).no_rows();
 
     transaction.commit();
 }

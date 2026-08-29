@@ -4,7 +4,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace virtual_planner::api::http {
 
@@ -20,6 +22,7 @@ ApiServer::ApiServer(const core::AppConfig& config,
       server_config_(std::move(server_config))
 {
     register_limits();
+    register_authentication_gate();
     register_exception_handler();
     register_cors();
     register_request_log();
@@ -53,6 +56,56 @@ const persistence::RepositorySet& ApiServer::repositories() const noexcept
 const ServerConfig& ApiServer::server_config() const noexcept
 {
     return server_config_;
+}
+
+std::optional<std::uint64_t> ApiServer::authenticated_user_id(
+    const httplib::Request& request) const
+{
+    const std::string cookie = request.get_header_value("Cookie");
+    constexpr std::string_view name = "vp_session=";
+    const std::size_t start = cookie.find(name);
+
+    if (start == std::string::npos)
+    {
+        return std::nullopt;
+    }
+
+    const std::size_t value_start = start + name.size();
+    const std::size_t value_end = cookie.find(';', value_start);
+    return sessions_.user_id(cookie.substr(value_start, value_end - value_start));
+}
+
+void ApiServer::begin_session(httplib::Response& response,
+                              std::uint64_t user_id)
+{
+    std::string cookie = "vp_session=" + sessions_.create(user_id) +
+        "; Path=/; HttpOnly; SameSite=Strict";
+
+    if (config_.profile() == core::ExecutionProfile::Production)
+    {
+        cookie += "; Secure";
+    }
+
+    response.set_header("Set-Cookie", cookie);
+}
+
+void ApiServer::end_session(const httplib::Request& request,
+                            httplib::Response& response)
+{
+    const std::string cookie = request.get_header_value("Cookie");
+    constexpr std::string_view name = "vp_session=";
+    const std::size_t start = cookie.find(name);
+
+    if (start != std::string::npos)
+    {
+        const std::size_t value_start = start + name.size();
+        const std::size_t value_end = cookie.find(';', value_start);
+        sessions_.remove(cookie.substr(value_start, value_end - value_start));
+    }
+
+    response.set_header(
+        "Set-Cookie",
+        "vp_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
 }
 
 int ApiServer::bind(const ServerConfig& config)
@@ -148,6 +201,7 @@ void ApiServer::register_cors()
             // Sem Vary, um cache intermediario serviria a resposta de uma
             // origem para outra.
             response.set_header("Vary", "Origin");
+            response.set_header("Access-Control-Allow-Credentials", "true");
         });
 
     // Preflight: o navegador manda OPTIONS antes de um PUT/DELETE ou de um
@@ -169,9 +223,37 @@ void ApiServer::register_cors()
                                             "GET, POST, PUT, PATCH, DELETE, OPTIONS");
                         response.set_header("Access-Control-Allow-Headers",
                                             "Content-Type");
+                        // Allow-Credentials NAO entra aqui: o post-routing
+                        // handler ja o acrescenta em toda resposta, incluindo
+                        // esta. Duas ocorrencias do mesmo cabecalho invalidam a
+                        // checagem de CORS e o navegador recusa o preflight.
                         response.set_header("Access-Control-Max-Age", "86400");
                         response.status = 204;
                     });
+}
+
+void ApiServer::register_authentication_gate()
+{
+    server_.set_pre_routing_handler(
+        [this](const httplib::Request& request, httplib::Response& response) {
+            const bool public_route = request.path == "/api/health" ||
+                (request.method == "POST" &&
+                 (request.path == "/api/auth/register" ||
+                  request.path == "/api/auth/login")) ||
+                request.method == "OPTIONS";
+
+            if (public_route || authenticated_user_id(request).has_value())
+            {
+                return httplib::Server::HandlerResponse::Unhandled;
+            }
+
+            response.status = 401;
+            response.set_header("WWW-Authenticate", "Session");
+            response.set_content(
+                ErrorResponse{401, "unauthorized", "Autenticacao necessaria."}.to_json(),
+                "application/json");
+            return httplib::Server::HandlerResponse::Handled;
+        });
 }
 
 void ApiServer::register_request_log()

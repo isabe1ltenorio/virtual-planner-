@@ -44,7 +44,8 @@ ListTasksUseCase::ListTasksUseCase(persistence::TaskRepository& repository)
 }
 
 std::vector<domain::Task> ListTasksUseCase::execute(
-    const ListTasksFilter& filter) const
+    const ListTasksFilter& filter,
+    std::uint64_t user_id) const
 {
     if (filter.start_date.has_value() && filter.end_date.has_value() &&
         *filter.start_date > *filter.end_date)
@@ -55,7 +56,7 @@ std::vector<domain::Task> ListTasksUseCase::execute(
 
     std::vector<domain::Task> result;
 
-    for (const auto& task : repository_.find_all())
+    for (const auto& task : repository_.find_all(user_id))
     {
         if (matches(task, filter))
         {

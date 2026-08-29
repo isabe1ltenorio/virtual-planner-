@@ -8,6 +8,11 @@ back-end/build/
 back-end/build-*/
 back-end/cmake-build-*/
 
+# Lixo de um cmake rodado dentro da arvore de fontes, em vez de num build-*/.
+# Sem isto o CMakeFiles/ aparece como nao rastreado e acaba num commit.
+CMakeFiles/
+CMakeCache.txt
+
 # Frontend (Node/Vite)
 front-end/node_modules/
 front-end/dist/
@@ -24,6 +29,9 @@ front-end/dist/
 .env
 .env.*
 !.env.example
+# .env.development e commitado de proposito: nao guarda segredo, so aponta o
+# front para o proxy /api. E o que faz `npm run dev` funcionar sem passo manual.
+!.env.development
 
 # Ferramentas locais de agentes de IA (ver docs/conventions.md)
 .claude/

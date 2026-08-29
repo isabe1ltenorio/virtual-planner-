@@ -13,7 +13,8 @@ public:
     explicit DeleteGoalUseCase(
         persistence::GoalRepository& repository);
 
-    void execute(std::uint64_t id);
+    void execute(std::uint64_t id,
+                 std::uint64_t user_id);
 
 private:
 

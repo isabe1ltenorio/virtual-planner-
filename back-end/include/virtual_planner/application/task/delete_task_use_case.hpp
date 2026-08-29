@@ -12,7 +12,7 @@ public:
     explicit DeleteTaskUseCase(persistence::TaskRepository& repository);
 
     // Lanca shared::NotFoundError quando nao existe Task com o id pedido.
-    void execute(std::uint64_t id);
+    void execute(std::uint64_t id, std::uint64_t user_id);
 
 private:
     persistence::TaskRepository& repository_;

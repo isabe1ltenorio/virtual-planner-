@@ -33,7 +33,8 @@ public:
     // Lanca std::invalid_argument quando start_date e end_date existem e
     // start_date e posterior a end_date, como ListGoalsUseCase.
     [[nodiscard]] std::vector<domain::Task> execute(
-        const ListTasksFilter& filter) const;
+        const ListTasksFilter& filter,
+        std::uint64_t user_id) const;
 
 private:
     persistence::TaskRepository& repository_;

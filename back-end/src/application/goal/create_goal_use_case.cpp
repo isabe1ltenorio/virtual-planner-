@@ -14,7 +14,8 @@ CreateGoalUseCase::CreateGoalUseCase(
 }
 
 std::uint64_t CreateGoalUseCase::execute(
-    const CreateGoalRequest& request)
+    const CreateGoalRequest& request,
+    std::uint64_t user_id)
 {
     if (request.description.empty())
     {
@@ -30,7 +31,7 @@ std::uint64_t CreateGoalUseCase::execute(
         request.period,
         request.reference_date);
 
-    const auto id = repository_.save(goal);
+    const auto id = repository_.save(goal, user_id);
 
     return id;
 }

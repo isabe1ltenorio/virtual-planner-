@@ -10,9 +10,10 @@ UpdateTaskUseCase::UpdateTaskUseCase(persistence::TaskRepository& repository)
 {
 }
 
-void UpdateTaskUseCase::execute(const UpdateTaskRequest& request)
+void UpdateTaskUseCase::execute(const UpdateTaskRequest& request,
+                                std::uint64_t user_id)
 {
-    auto task = repository_.find_by_id(request.id);
+    auto task = repository_.find_by_id(request.id, user_id);
 
     if (!task.has_value())
     {
@@ -25,7 +26,7 @@ void UpdateTaskUseCase::execute(const UpdateTaskRequest& request)
     task->change_time_slot(request.time_slot);
     task->change_priority(request.priority);
 
-    repository_.update(*task);
+    repository_.update(*task, user_id);
 }
 
 } // namespace virtual_planner::application

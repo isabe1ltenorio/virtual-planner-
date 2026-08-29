@@ -11,6 +11,7 @@
 
 if(VIRTUAL_PLANNER_WITH_HTTP)
   include(FetchContent)
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 
   # O servidor nao usa TLS nem compressao; desligar evita exigir OpenSSL,
   # zlib e Brotli instalados na maquina.
@@ -32,6 +33,8 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/server_config.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/api_server.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/error_response.cpp
+    ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/session_store.cpp
+    ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/auth_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/reporting_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/goal_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/task_routes.cpp
@@ -41,6 +44,7 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     PUBLIC
       virtual_planner_json
       httplib::httplib
+      OpenSSL::Crypto
   )
 
   # PUBLIC para que main.cpp e os testes vejam o macro e compilem o caminho

@@ -13,6 +13,7 @@
 
 #if defined(VIRTUAL_PLANNER_WITH_HTTP)
 #include "virtual_planner/api/http/api_server.hpp"
+#include "virtual_planner/api/http/routes/auth_routes.hpp"
 #include "virtual_planner/api/http/routes/reporting_routes.hpp"
 #include "virtual_planner/api/http/server_config.hpp"
 #include "virtual_planner/api/http/routes/goal_routes.hpp"
@@ -115,6 +116,7 @@ int main() {
     virtual_planner::api::http::ApiServer server(
         config, repositories, health_database, logger, server_config);
 
+    virtual_planner::api::http::register_auth_routes(server);
     virtual_planner::api::http::register_reporting_routes(server);
     virtual_planner::api::http::register_goal_routes(server);
     virtual_planner::api::http::register_task_routes(server);

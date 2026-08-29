@@ -39,7 +39,8 @@ public:
     explicit TaskConflictService(persistence::TaskRepository& repository);
 
     [[nodiscard]] std::vector<TaskConflict> conflicts_on(
-        const domain::Date& date) const;
+        const domain::Date& date,
+        std::uint64_t user_id) const;
 
 private:
     persistence::TaskRepository& repository_;

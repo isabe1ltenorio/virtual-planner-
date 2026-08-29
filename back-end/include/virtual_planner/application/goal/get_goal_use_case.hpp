@@ -14,7 +14,8 @@ public:
         persistence::GoalRepository& repository);
 
     [[nodiscard]]
-    domain::Goal execute(std::uint64_t id) const;
+    domain::Goal execute(std::uint64_t id,
+                         std::uint64_t user_id) const;
 
 private:
     persistence::GoalRepository& repository_;

@@ -332,6 +332,23 @@ application::ChangeGoalStatusRequest change_goal_status_request_from(
                 "status"))};
 }
 
+// Dono da requisicao. O gate de autenticacao (ApiServer::register_authentication_gate)
+// ja respondeu 401 a quem nao tem sessao valida, entao chegar aqui sem
+// identidade seria defeito de programacao — uma rota registrada como publica
+// por engano, por exemplo. Falhar alto e melhor que operar sobre dono zero.
+std::uint64_t caller_id(const ApiServer& api, const httplib::Request& request)
+{
+    const auto user_id = api.authenticated_user_id(request);
+
+    if (!user_id.has_value())
+    {
+        throw std::logic_error(
+            "Goal route reached without an authenticated caller.");
+    }
+
+    return *user_id;
+}
+
 } // namespace
 
 void register_goal_routes(ApiServer& api)
@@ -348,9 +365,11 @@ void register_goal_routes(ApiServer& api)
     // POST /api/goals
     api.server().Post(
         "/api/goals",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
+            const std::uint64_t user_id = caller_id(api, request);
+
             const application::CreateGoalRequest
                 create_request =
                     create_goal_request_from(
@@ -362,14 +381,15 @@ void register_goal_routes(ApiServer& api)
 
             const std::uint64_t id =
                 create_use_case.execute(
-                    create_request);
+                    create_request,
+                    user_id);
 
             application::GetGoalUseCase
                 get_use_case{
                     *goals};
 
             const domain::Goal created_goal =
-                get_use_case.execute(id);
+                get_use_case.execute(id, user_id);
 
             response.status = 201;
 
@@ -388,18 +408,19 @@ void register_goal_routes(ApiServer& api)
     // PATCH /api/goals/:id
     api.server().Patch(
         R"(/api/goals/(\d+))",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
             const std::uint64_t id =
                 path_id(request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             application::GetGoalUseCase
                 get_use_case{
                     *goals};
 
             const domain::Goal current_goal =
-                get_use_case.execute(id);
+                get_use_case.execute(id, user_id);
 
             const application::UpdateGoalRequest
                 update_request =
@@ -412,10 +433,11 @@ void register_goal_routes(ApiServer& api)
                     *goals};
 
             update_use_case.execute(
-                update_request);
+                update_request,
+                user_id);
 
             const domain::Goal updated_goal =
-                get_use_case.execute(id);
+                get_use_case.execute(id, user_id);
 
             response.set_content(
                 json::to_json(updated_goal).dump(),
@@ -425,11 +447,12 @@ void register_goal_routes(ApiServer& api)
     // PATCH /api/goals/:id/status
     api.server().Patch(
         R"(/api/goals/(\d+)/status)",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
             const std::uint64_t id =
                 path_id(request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             const application::ChangeGoalStatusRequest
                 status_request =
@@ -442,14 +465,15 @@ void register_goal_routes(ApiServer& api)
                     *goals};
 
             use_case.execute(
-                status_request);
+                status_request,
+                user_id);
 
             application::GetGoalUseCase
                 get_use_case{
                     *goals};
 
             const domain::Goal updated_goal =
-                get_use_case.execute(id);
+                get_use_case.execute(id, user_id);
 
             response.set_content(
                 json::to_json(updated_goal).dump(),
@@ -459,16 +483,17 @@ void register_goal_routes(ApiServer& api)
     // DELETE /api/goals/:id
     api.server().Delete(
         R"(/api/goals/(\d+))",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
             const std::uint64_t id =
                 path_id(request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             application::DeleteGoalUseCase use_case{
                 *goals};
 
-            use_case.execute(id);
+            use_case.execute(id, user_id);
 
             response.status = 204;
         });
@@ -476,12 +501,13 @@ void register_goal_routes(ApiServer& api)
     // GET /api/goals?period=weekly&date=2026-08-05
     api.server().Get(
         "/api/goals",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
             const GoalWindow window =
                 goal_window_from(
                     request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             application::ListGoalsUseCase
                 use_case{
@@ -490,7 +516,8 @@ void register_goal_routes(ApiServer& api)
             const auto goal_list =
                 use_case.execute(
                     window.start,
-                    window.end);
+                    window.end,
+                    user_id);
 
             nlohmann::json body =
                 nlohmann::json::array();
@@ -509,7 +536,7 @@ void register_goal_routes(ApiServer& api)
     // GET /api/goals/:id
     api.server().Get(
         R"(/api/goals/(\d+))",
-        [goals](
+        [&api, goals](
             const httplib::Request& request,
             httplib::Response& response) {
             application::GetGoalUseCase
@@ -518,7 +545,8 @@ void register_goal_routes(ApiServer& api)
 
             const domain::Goal goal =
                 use_case.execute(
-                    path_id(request));
+                    path_id(request),
+                    caller_id(api, request));
 
             response.set_content(
                 json::to_json(goal).dump(),

@@ -4,10 +4,16 @@
 #include <string_view>
 
 #include "support/expect.hpp"
+
+#include <cstdint>
 #include "virtual_planner/persistence/memory/in_memory_task_repository.hpp"
 #include "virtual_planner/shared/errors.hpp"
 
 using namespace virtual_planner;
+
+// Dono usado por todo o arquivo: o contrato do repositorio exige um, e
+// nao ha valor que signifique "qualquer um".
+constexpr std::uint64_t kOwner = 1;
 
 namespace {
 
@@ -16,13 +22,13 @@ void expect_status_change(application::ChangeTaskStatusUseCase& use_case,
                           domain::TaskStatus target,
                           std::string_view message)
 {
-    use_case.execute(application::ChangeTaskStatusRequest{1, target});
+    use_case.execute(application::ChangeTaskStatusRequest{1, target}, kOwner);
 
-    auto stored = repository.find_by_id(1);
+    auto stored = repository.find_by_id(1, kOwner);
 
     VP_EXPECT(stored.has_value(), "task must exist after a status change");
     VP_EXPECT(stored->status() == target, message);
-    VP_EXPECT(repository.find_all().size() == 1,
+    VP_EXPECT(repository.find_all(kOwner).size() == 1,
               "changing status must not create a second row");
 }
 
@@ -39,7 +45,7 @@ int main()
         domain::Date{15, 8, 2026},
         domain::TimeSlot{std::chrono::hours{9}, std::chrono::hours{10}},
         domain::Priority::Medium,
-        domain::TaskStatus::Pending});
+        domain::TaskStatus::Pending}, kOwner);
 
     application::ChangeTaskStatusUseCase use_case(repository);
 
@@ -60,7 +66,7 @@ int main()
     try
     {
         use_case.execute(application::ChangeTaskStatusRequest{
-            999, domain::TaskStatus::Executed});
+            999, domain::TaskStatus::Executed}, kOwner);
     }
     catch (const shared::NotFoundError&)
     {

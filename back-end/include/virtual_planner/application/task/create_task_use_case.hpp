@@ -29,7 +29,8 @@ class CreateTaskUseCase
 public:
     explicit CreateTaskUseCase(persistence::TaskRepository& repository);
 
-    [[nodiscard]] std::uint64_t execute(const CreateTaskRequest& request);
+    [[nodiscard]] std::uint64_t execute(const CreateTaskRequest& request,
+                                        std::uint64_t user_id);
 
 private:
     persistence::TaskRepository& repository_;

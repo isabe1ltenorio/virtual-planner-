@@ -25,7 +25,8 @@ public:
         persistence::GoalRepository& repository);
 
     [[nodiscard]] std::uint64_t execute(
-        const CreateGoalRequest& request);
+        const CreateGoalRequest& request,
+        std::uint64_t user_id);
 
 private:
     persistence::GoalRepository& repository_;

@@ -27,6 +27,13 @@ struct ReportRequest
     // Intervalo inclusivo nas duas pontas.
     domain::Date start_date;
     domain::Date end_date;
+
+    // Dono do relatorio. Sem ele o servico somava a base inteira e devolvia o
+    // resultado a qualquer chamador (issue #113): mesmo sem ler o registro
+    // alheio, quem chamasse aprendia quantas metas existem, de que categorias e
+    // em que turnos. E campo obrigatorio de proposito — nao ha valor padrao que
+    // signifique "todo mundo".
+    std::uint64_t user_id;
 };
 
 // Um balde agregado: semana, mes, turno ou categoria.

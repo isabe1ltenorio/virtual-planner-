@@ -17,7 +17,8 @@ public:
     [[nodiscard]]
     std::vector<domain::Goal> execute(
         const domain::Date& start_date,
-        const domain::Date& end_date) const;
+        const domain::Date& end_date,
+        std::uint64_t user_id) const;
 
 private:
     persistence::GoalRepository& repository_;

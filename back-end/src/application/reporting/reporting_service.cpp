@@ -255,7 +255,7 @@ ReportSummary ReportingService::execute(const ReportRequest& request) const
     double goals_score = 0.0;
     std::map<std::string, Accumulator> goal_categories;
 
-    for (const auto& goal : goals_.find_all())
+    for (const auto& goal : goals_.find_all(request.user_id))
     {
         if (!within(goal.reference_date(), request.start_date, request.end_date))
         {
@@ -289,7 +289,7 @@ ReportSummary ReportingService::execute(const ReportRequest& request) const
     std::map<std::string, Accumulator> task_categories;
     std::array<Accumulator, 3> shifts{};
 
-    for (const auto& task : tasks_.find_all())
+    for (const auto& task : tasks_.find_all(request.user_id))
     {
         if (!within(task.date(), request.start_date, request.end_date))
         {

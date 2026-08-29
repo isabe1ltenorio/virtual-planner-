@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "virtual_planner/persistence/user_repository.hpp"
@@ -64,8 +66,48 @@ public:
             users_.end());
     }
 
+    std::uint64_t create(const domain::User& user,
+                         const std::string& password_hash) override
+    {
+        for (const auto& current : credentials_)
+        {
+            if (current.email == user.email())
+            {
+                throw std::invalid_argument("User email is already registered.");
+            }
+        }
+
+        const std::uint64_t id = next_id_++;
+        users_.emplace_back(id, user.name(), user.email());
+        credentials_.push_back(Credential{id, user.email(), password_hash});
+        return id;
+    }
+
+    std::optional<UserCredentials> find_credentials_by_email(
+        const std::string& email) override
+    {
+        for (const auto& credential : credentials_)
+        {
+            if (credential.email == email)
+            {
+                return UserCredentials{credential.user_id, credential.password_hash};
+            }
+        }
+
+        return std::nullopt;
+    }
+
 private:
+    struct Credential
+    {
+        std::uint64_t user_id;
+        std::string email;
+        std::string password_hash;
+    };
+
     std::vector<domain::User> users_;
+    std::vector<Credential> credentials_;
+    std::uint64_t next_id_{1};
 };
 
 } // namespace virtual_planner::persistence

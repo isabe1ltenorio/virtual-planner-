@@ -9,9 +9,10 @@ GetTaskUseCase::GetTaskUseCase(persistence::TaskRepository& repository)
 {
 }
 
-domain::Task GetTaskUseCase::execute(std::uint64_t id) const
+domain::Task GetTaskUseCase::execute(std::uint64_t id,
+                                     std::uint64_t user_id) const
 {
-    auto task = repository_.find_by_id(id);
+    auto task = repository_.find_by_id(id, user_id);
 
     if (!task.has_value())
     {

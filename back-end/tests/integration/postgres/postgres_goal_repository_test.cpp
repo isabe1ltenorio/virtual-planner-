@@ -9,6 +9,8 @@
 
 #include "support/expect.hpp"
 
+#include <cstdint>
+
 using namespace virtual_planner;
 
 namespace
@@ -50,6 +52,10 @@ int main()
 
         PostgresGoalRepository repository(database);
 
+        // O usuario semeado pela migration 001. Toda query do adapter e
+        // escopada por dono desde a 023.
+        constexpr std::uint64_t kOwner = 1;
+
         domain::Goal goal(
             0,
             "Finish C++ Planner",
@@ -59,14 +65,14 @@ int main()
             domain::Date(10, 8, 2026));
 
         // Act: save()
-        const auto id = repository.save(goal);
+        const auto id = repository.save(goal, kOwner);
 
         // Assert save()
         VP_EXPECT(
             id != 0,
             "save() must return a non-zero id");
 
-        auto saved_goal = repository.find_by_id(id);
+        auto saved_goal = repository.find_by_id(id, kOwner);
 
         VP_EXPECT(
             saved_goal.has_value(),
@@ -98,7 +104,7 @@ int main()
             "saved goal reference date must match");
 
         // Assert find_all()
-        const auto goals = repository.find_all();
+        const auto goals = repository.find_all(kOwner);
 
         const auto found = std::any_of(
             goals.begin(),
@@ -123,10 +129,10 @@ int main()
             domain::GoalPeriod::Monthly,
             domain::Date(20, 8, 2026));
 
-        repository.update(updated_goal);
+        repository.update(updated_goal, kOwner);
 
         // Assert update()
-        auto reloaded_goal = repository.find_by_id(id);
+        auto reloaded_goal = repository.find_by_id(id, kOwner);
 
         VP_EXPECT(
             reloaded_goal.has_value(),
@@ -168,7 +174,8 @@ int main()
         const auto goals_in_range =
             repository.find_by_date_range(
                 domain::Date(15, 8, 2026),
-                domain::Date(25, 8, 2026));
+                domain::Date(25, 8, 2026),
+                kOwner);
 
         const auto found_in_range = std::any_of(
             goals_in_range.begin(),
@@ -186,7 +193,8 @@ int main()
         const auto goals_on_start_boundary =
             repository.find_by_date_range(
                 domain::Date(20, 8, 2026),
-                domain::Date(25, 8, 2026));
+                domain::Date(25, 8, 2026),
+                kOwner);
 
         // Assert: the lower boundary is inclusive.
         const auto found_on_start_boundary = std::any_of(
@@ -205,7 +213,8 @@ int main()
         const auto goals_on_end_boundary =
             repository.find_by_date_range(
                 domain::Date(15, 8, 2026),
-                domain::Date(20, 8, 2026));
+                domain::Date(20, 8, 2026),
+                kOwner);
 
         // Assert: the upper boundary is inclusive.
         const auto found_on_end_boundary = std::any_of(
@@ -224,7 +233,8 @@ int main()
         const auto goals_outside_range =
             repository.find_by_date_range(
                 domain::Date(1, 8, 2026),
-                domain::Date(15, 8, 2026));
+                domain::Date(15, 8, 2026),
+                kOwner);
 
         const auto found_outside_range = std::any_of(
             goals_outside_range.begin(),
@@ -239,10 +249,10 @@ int main()
             "find_by_date_range() must exclude goals outside the range");
 
         // Cleanup
-        repository.remove(id);
+        repository.remove(id, kOwner);
 
         const auto removed_goal =
-            repository.find_by_id(id);
+            repository.find_by_id(id, kOwner);
 
         VP_EXPECT(
             !removed_goal.has_value(),

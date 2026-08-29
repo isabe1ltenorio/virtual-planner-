@@ -13,11 +13,6 @@ namespace virtual_planner::infrastructure::postgres {
 namespace
 {
 
-// Mesma constante do PostgresReminderRepository. Enquanto a ADR-002 mantiver o
-// sistema single-tenant, este e o dono de tudo; quando houver autenticacao, o
-// valor passa a vir da requisicao e so este ponto muda.
-constexpr std::uint64_t kSingleTenantUserId{1};
-
 std::string date_to_postgres(const domain::Date& date)
 {
     std::ostringstream stream;
@@ -48,7 +43,8 @@ PostgresGoalRepository::PostgresGoalRepository(
 }
 
 std::uint64_t PostgresGoalRepository::save(
-    const domain::Goal& goal)
+    const domain::Goal& goal,
+    std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -68,7 +64,7 @@ std::uint64_t PostgresGoalRepository::save(
         )",
         pqxx::params{
             transaction,
-            kSingleTenantUserId,
+            user_id,
             goal.description(),
             to_string(goal.category()),
             to_string(goal.status()),
@@ -85,7 +81,8 @@ std::uint64_t PostgresGoalRepository::save(
 }
 
 void PostgresGoalRepository::update(
-    const domain::Goal& goal)
+    const domain::Goal& goal,
+    std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -109,14 +106,15 @@ void PostgresGoalRepository::update(
             to_string(goal.period()),
             date_to_postgres(goal.reference_date()),
             goal.id(),
-            kSingleTenantUserId
+            user_id
         }).no_rows();
 
     transaction.commit();
 }
 
 std::optional<domain::Goal>
-PostgresGoalRepository::find_by_id(std::uint64_t id)
+PostgresGoalRepository::find_by_id(std::uint64_t id,
+                                   std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(
         database_.connection());
@@ -138,7 +136,7 @@ PostgresGoalRepository::find_by_id(std::uint64_t id)
             FROM goals
             WHERE id = $1 AND user_id = $2
         )",
-        pqxx::params{transaction, id, kSingleTenantUserId}
+        pqxx::params{transaction, id, user_id}
     );
 
     if (result.empty())
@@ -162,7 +160,7 @@ PostgresGoalRepository::find_by_id(std::uint64_t id)
 }
 
 std::vector<domain::Goal>
-PostgresGoalRepository::find_all()
+PostgresGoalRepository::find_all(std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(
         database_.connection());
@@ -185,7 +183,7 @@ PostgresGoalRepository::find_all()
             WHERE user_id = $1
             ORDER BY id
         )",
-        pqxx::params{transaction, kSingleTenantUserId}
+        pqxx::params{transaction, user_id}
     );
 
     std::vector<domain::Goal> goals;
@@ -213,7 +211,8 @@ PostgresGoalRepository::find_all()
 std::vector<domain::Goal>
 PostgresGoalRepository::find_by_date_range(
     const domain::Date& start,
-    const domain::Date& end)
+    const domain::Date& end,
+    std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(
         database_.connection());
@@ -240,7 +239,7 @@ PostgresGoalRepository::find_by_date_range(
         )",
         pqxx::params{
             transaction,
-            kSingleTenantUserId,
+            user_id,
             date_to_postgres(start),
             date_to_postgres(end)
         }
@@ -269,13 +268,14 @@ PostgresGoalRepository::find_by_date_range(
 }
 
 void PostgresGoalRepository::remove(
-    std::uint64_t id)
+    std::uint64_t id,
+    std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
     transaction.exec(
         "DELETE FROM goals WHERE id=$1 AND user_id=$2",
-        pqxx::params{transaction, id, kSingleTenantUserId}).no_rows();
+        pqxx::params{transaction, id, user_id}).no_rows();
 
     transaction.commit();
 }

@@ -20,7 +20,8 @@ public:
     explicit ChangeGoalStatusUseCase(
         persistence::GoalRepository& repository);
 
-    void execute(const ChangeGoalStatusRequest& request);
+    void execute(const ChangeGoalStatusRequest& request,
+                 std::uint64_t user_id);
 
 private:
     persistence::GoalRepository& repository_;

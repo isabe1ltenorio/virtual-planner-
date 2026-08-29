@@ -43,7 +43,8 @@ domain::Date from_days(Days days)
 }
 
 ReportRequest report_window(std::string_view period,
-                            const domain::Date& anchor_date)
+                            const domain::Date& anchor_date,
+                            std::uint64_t user_id)
 {
     const Days anchor{to_days(anchor_date)};
     const std::chrono::year_month_day calendar_date{anchor};
@@ -56,7 +57,8 @@ ReportRequest report_window(std::string_view period,
             anchor - std::chrono::days{static_cast<int>(iso_weekday - 1U)};
 
         return ReportRequest{from_days(start),
-                             from_days(start + std::chrono::days{6})};
+                             from_days(start + std::chrono::days{6}),
+                             user_id};
     }
 
     if (period == "monthly")
@@ -66,7 +68,7 @@ ReportRequest report_window(std::string_view period,
         const Days end{
             calendar_date.year() / calendar_date.month() / std::chrono::last};
 
-        return ReportRequest{from_days(start), from_days(end)};
+        return ReportRequest{from_days(start), from_days(end), user_id};
     }
 
     if (period == "yearly")
@@ -76,7 +78,7 @@ ReportRequest report_window(std::string_view period,
         const Days end{
             calendar_date.year() / std::chrono::December / std::chrono::day{31}};
 
-        return ReportRequest{from_days(start), from_days(end)};
+        return ReportRequest{from_days(start), from_days(end), user_id};
     }
 
     throw std::invalid_argument(
@@ -95,13 +97,14 @@ std::string required_query_parameter(const httplib::Request& request,
     return request.get_param_value(name);
 }
 
-ReportRequest report_request_from(const httplib::Request& request)
+ReportRequest report_request_from(const httplib::Request& request,
+                                  std::uint64_t user_id)
 {
     const std::string period = required_query_parameter(request, "period");
     const std::string date = required_query_parameter(request, "date");
     const domain::Date anchor_date = json::date_from_json(date);
 
-    return report_window(period, anchor_date);
+    return report_window(period, anchor_date, user_id);
 }
 
 domain::Date current_local_date()
@@ -195,6 +198,21 @@ void set_summary_response(httplib::Response& response,
     response.set_content(summary_to_json(summary).dump(), "application/json");
 }
 
+// Dono da requisicao. O gate de autenticacao ja recusou quem nao tem sessao,
+// entao chegar aqui sem identidade seria defeito de programacao.
+std::uint64_t caller_id(const ApiServer& api, const httplib::Request& request)
+{
+    const auto user_id = api.authenticated_user_id(request);
+
+    if (!user_id.has_value())
+    {
+        throw std::logic_error(
+            "Reporting route reached without an authenticated caller.");
+    }
+
+    return *user_id;
+}
+
 } // namespace
 
 void register_reporting_routes(ApiServer& api)
@@ -204,20 +222,27 @@ void register_reporting_routes(ApiServer& api)
 
     api.server().Get(
         "/api/reports",
-        [goals, tasks](const httplib::Request& request,
-                       httplib::Response& response) {
+        [&api, goals, tasks](const httplib::Request& request,
+                             httplib::Response& response) {
             set_summary_response(
                 response,
-                execute_report(goals, tasks, report_request_from(request)));
+                execute_report(
+                    goals,
+                    tasks,
+                    report_request_from(request, caller_id(api, request))));
         });
 
     api.server().Get(
         "/api/dashboard",
-        [goals, tasks](const httplib::Request&, httplib::Response& response) {
+        [&api, goals, tasks](const httplib::Request& request,
+                             httplib::Response& response) {
             const domain::Date today = current_local_date();
             set_summary_response(
                 response,
-                execute_report(goals, tasks, ReportRequest{today, today}));
+                execute_report(
+                    goals,
+                    tasks,
+                    ReportRequest{today, today, caller_id(api, request)}));
         });
 }
 

@@ -11,9 +11,10 @@ ChangeTaskStatusUseCase::ChangeTaskStatusUseCase(
 {
 }
 
-void ChangeTaskStatusUseCase::execute(const ChangeTaskStatusRequest& request)
+void ChangeTaskStatusUseCase::execute(const ChangeTaskStatusRequest& request,
+                                      std::uint64_t user_id)
 {
-    auto task = repository_.find_by_id(request.id);
+    auto task = repository_.find_by_id(request.id, user_id);
 
     if (!task.has_value())
     {
@@ -43,7 +44,7 @@ void ChangeTaskStatusUseCase::execute(const ChangeTaskStatusRequest& request)
             break;
     }
 
-    repository_.update(*task);
+    repository_.update(*task, user_id);
 }
 
 } // namespace virtual_planner::application

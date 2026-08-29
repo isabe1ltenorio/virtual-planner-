@@ -34,11 +34,12 @@ TaskConflictService::TaskConflictService(persistence::TaskRepository& repository
 }
 
 std::vector<TaskConflict> TaskConflictService::conflicts_on(
-    const domain::Date& date) const
+    const domain::Date& date,
+    std::uint64_t user_id) const
 {
     std::vector<domain::Task> on_date;
 
-    for (const auto& task : repository_.find_all())
+    for (const auto& task : repository_.find_all(user_id))
     {
         if (task.date() == date && occupies_slot(task.status()))
         {

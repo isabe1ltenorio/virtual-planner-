@@ -13,7 +13,8 @@ ListGoalsUseCase::ListGoalsUseCase(
 std::vector<domain::Goal>
 ListGoalsUseCase::execute(
     const domain::Date& start_date,
-    const domain::Date& end_date) const
+    const domain::Date& end_date,
+    std::uint64_t user_id) const
 {
     if (start_date > end_date)
     {
@@ -23,7 +24,8 @@ ListGoalsUseCase::execute(
 
     return repository_.find_by_date_range(
         start_date,
-        end_date);
+        end_date,
+        user_id);
 }
 
 } // namespace virtual_planner::application

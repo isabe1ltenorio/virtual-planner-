@@ -22,7 +22,8 @@ public:
     explicit ChangeTaskStatusUseCase(persistence::TaskRepository& repository);
 
     // Lanca shared::NotFoundError quando nao existe Task com o id pedido.
-    void execute(const ChangeTaskStatusRequest& request);
+    void execute(const ChangeTaskStatusRequest& request,
+                 std::uint64_t user_id);
 
 private:
     persistence::TaskRepository& repository_;

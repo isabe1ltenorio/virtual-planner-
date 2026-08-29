@@ -12,8 +12,8 @@ int main()
     persistence::InMemoryTaskRepository tasks;
     persistence::InMemoryReminderRepository reminders;
 
-    VP_EXPECT(goals.find_all().empty(), "convenience header should expose a usable goal repository");
-    VP_EXPECT(tasks.find_all().empty(), "convenience header should expose a usable task repository");
+    VP_EXPECT(goals.find_all(1).empty(), "convenience header should expose a usable goal repository");
+    VP_EXPECT(tasks.find_all(1).empty(), "convenience header should expose a usable task repository");
     VP_EXPECT(reminders.find_all().empty(), "convenience header should expose a usable reminder repository");
 
     persistence::InMemoryUserRepository repository;

@@ -59,6 +59,72 @@ Um `VP_HTTP_PORT` que não seja um inteiro entre 0 e 65535 aborta a subida com
 `shared::ConfigError` e mensagem explícita — o servidor não sobe em uma porta
 que ninguém pediu.
 
+## Autenticação
+
+Toda rota exige sessão, com três exceções: `GET /api/health`,
+`POST /api/auth/register` e `POST /api/auth/login`. O preflight `OPTIONS`
+também passa, senão o navegador nunca chegaria a mandar a requisição real.
+
+Sem sessão válida, a resposta é **401** com `code="unauthorized"` — inclusive
+para caminho que não existe. Isso é deliberado: responder `404` para rota
+inexistente e `401` para rota existente deixaria qualquer anônimo mapear a
+superfície da API só variando o caminho.
+
+A sessão viaja num cookie `vp_session`, marcado `HttpOnly` (JavaScript não o
+lê, então XSS não rouba a sessão) e `SameSite=Strict` (o navegador não o envia
+em requisição vinda de outro site, o que fecha CSRF). Em `VP_PROFILE=production`
+ele ganha `Secure`, e só trafega sobre HTTPS.
+
+Como a sessão é cookie e não cabeçalho, o CORS responde
+`Access-Control-Allow-Credentials: true` e ecoa a origem em vez de devolver
+`*` — com `*` o navegador recusa requisição com credencial.
+
+### `POST /api/auth/register`
+
+```json
+{
+  "name": "Alice",
+  "email": "alice@example.com",
+  "password": "uma-senha-de-verdade"
+}
+```
+
+Responde **201** com `{"id": 1, "email": "alice@example.com"}`. A senha exige
+no mínimo 12 caracteres e é guardada como PBKDF2-SHA256 com salt por usuário e
+210 000 iterações — nunca em texto claro. Registrar **não** abre sessão.
+
+### `POST /api/auth/login`
+
+```json
+{
+  "email": "alice@example.com",
+  "password": "uma-senha-de-verdade"
+}
+```
+
+Responde **204** com o cookie `vp_session` no `Set-Cookie`. Credencial errada
+responde **401** com `code="invalid_credentials"` — a mesma resposta para
+e-mail inexistente e para senha errada, de propósito: distinguir os dois casos
+entregaria uma lista de quem tem conta.
+
+### `POST /api/auth/logout`
+
+Responde **204** e invalida a sessão no servidor, além de expirar o cookie. Não
+depende de o cookie ainda ser válido.
+
+## Escopo por dono
+
+Todo recurso pertence a um usuário. As rotas de `Goal` e de relatórios operam
+exclusivamente sobre o que é de quem chamou.
+
+Pedir um recurso de outra pessoa responde **404**, e não 403: um 403
+confirmaria ao chamador que aquele identificador existe. Vale para leitura,
+atualização, mudança de status e remoção.
+
+A verificação vive na assinatura do repositório
+(`find_by_id(id, user_id)`), e não em cada handler — assim uma rota nova não
+consegue esquecer de verificar, porque não compila sem o dono.
+
 ## `GET /api/health`
 
 Responde **sempre 200** com `Content-Type: application/json`. A resposta chegar

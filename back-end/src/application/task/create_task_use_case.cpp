@@ -10,7 +10,8 @@ CreateTaskUseCase::CreateTaskUseCase(persistence::TaskRepository& repository)
 {
 }
 
-std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request)
+std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request,
+                                         std::uint64_t user_id)
 {
     // id 0: o repositorio gera o id real e o devolve. Descricao e time slot
     // sao validados pelos construtores de Task e TimeSlot.
@@ -23,7 +24,7 @@ std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request)
         request.priority,
         domain::TaskStatus::Pending);
 
-    return repository_.save(task);
+    return repository_.save(task, user_id);
 }
 
 } // namespace virtual_planner::application

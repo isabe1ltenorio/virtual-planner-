@@ -15,15 +15,17 @@ class PostgresTaskRepository final
 public:
     explicit PostgresTaskRepository(PostgresDatabase& database);
 
-    std::uint64_t save(const domain::Task& task) override;
+    std::uint64_t save(const domain::Task& task,
+                       std::uint64_t user_id) override;
 
-    void update(const domain::Task& task) override;
+    void update(const domain::Task& task, std::uint64_t user_id) override;
 
-    std::optional<domain::Task> find_by_id(std::uint64_t id) override;
+    std::optional<domain::Task> find_by_id(std::uint64_t id,
+                                           std::uint64_t user_id) override;
 
-    std::vector<domain::Task> find_all() override;
+    std::vector<domain::Task> find_all(std::uint64_t user_id) override;
 
-    void remove(std::uint64_t id) override;
+    void remove(std::uint64_t id, std::uint64_t user_id) override;
 
 private:
     PostgresDatabase& database_;

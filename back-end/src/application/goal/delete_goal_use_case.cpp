@@ -11,9 +11,10 @@ DeleteGoalUseCase::DeleteGoalUseCase(
 {
 }
 
-void DeleteGoalUseCase::execute(std::uint64_t id)
+void DeleteGoalUseCase::execute(std::uint64_t id,
+                                std::uint64_t user_id)
 {
-    auto goal = repository_.find_by_id(id);
+    auto goal = repository_.find_by_id(id, user_id);
 
     if (!goal.has_value())
     {
@@ -21,7 +22,7 @@ void DeleteGoalUseCase::execute(std::uint64_t id)
             "Goal not found.");
     }
 
-    repository_.remove(id);
+    repository_.remove(id, user_id);
 }
 
 }

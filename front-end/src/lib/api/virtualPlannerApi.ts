@@ -1,5 +1,14 @@
 import type { Task, Goal, Reminder } from "../../types/domain";
 import { mockTasks, mockGoals, mockReminders } from "../../mocks/seed";
+import { isApiEnabled } from "./config";
+import * as goalsApi from "./goalsApi";
+
+// Fachada única das telas. Os métodos de `Goal` falam com o backend quando
+// `VITE_API_URL` está definida, e caem nos mocks quando não está.
+//
+// `Task` e `Reminder` seguem só em mock: não existem endpoints para eles ainda.
+// A escolha fica aqui, e não nas páginas, para que ligar o resto no futuro seja
+// mudança de um arquivo só.
 
 //simula tempo de resposta da internet
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,11 +81,19 @@ export const virtualPlannerApi = {
 
   // Metodos de Metas
   async getGoals(): Promise<Goal[]> {
+    if (isApiEnabled()) {
+      return goalsApi.listGoals();
+    }
+
     await delay(500);
     return [...currentGoals];
   },
 
   async createGoal(newGoalData: Omit<Goal, "id">): Promise<Goal> {
+    if (isApiEnabled()) {
+      return goalsApi.createGoal(newGoalData);
+    }
+
     await delay(600);
     const newId =
       currentGoals.length > 0
@@ -89,6 +106,10 @@ export const virtualPlannerApi = {
   },
 
   async updateGoal(id: number, updates: Partial<Goal>): Promise<Goal> {
+    if (isApiEnabled()) {
+      return goalsApi.updateGoal(id, updates);
+    }
+
     await delay(400);
     const index = currentGoals.findIndex((g) => g.id === id);
     if (index === -1) throw new Error(`Meta com ID ${id} não encontrada.`);
@@ -99,6 +120,10 @@ export const virtualPlannerApi = {
   },
 
   async deleteGoal(id: number): Promise<void> {
+    if (isApiEnabled()) {
+      return goalsApi.deleteGoal(id);
+    }
+
     await delay(300);
     currentGoals = currentGoals.filter((g) => g.id !== id);
   },

@@ -19,6 +19,8 @@ import { PlannerPage } from "./pages/PlannerPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { LoginPage } from "./pages/LoginPage";
+import { RequireSession } from "./components/RequireSession";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -89,7 +91,23 @@ function MainLayout() {
 export default function App() {
   return (
     <BrowserRouter>
-      <MainLayout />
+      <Routes>
+        {/* Fora do AppShell de proposito: a tela de login nao tem sidebar nem
+            barra superior, e nao pode exigir sessao para ser vista. */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Todo o resto so renderiza com sessao valida. Sem o guarda, quem nao
+            estivesse logado via o dashboard montado e vazio, com 401 no
+            console e nenhuma explicacao na tela. */}
+        <Route
+          path="*"
+          element={
+            <RequireSession>
+              <MainLayout />
+            </RequireSession>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }

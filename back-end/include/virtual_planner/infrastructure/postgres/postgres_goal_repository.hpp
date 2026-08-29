@@ -16,20 +16,26 @@ public:
     explicit PostgresGoalRepository(
         PostgresDatabase& database);
 
-    std::uint64_t save(const domain::Goal& goal) override;
+    std::uint64_t save(const domain::Goal& goal,
+                       std::uint64_t user_id) override;
 
-    void update(const domain::Goal& goal) override;
+    void update(const domain::Goal& goal,
+                std::uint64_t user_id) override;
 
     std::optional<domain::Goal> find_by_id(
-        std::uint64_t id) override;
+        std::uint64_t id,
+        std::uint64_t user_id) override;
 
-    std::vector<domain::Goal> find_all() override;
+    std::vector<domain::Goal> find_all(
+        std::uint64_t user_id) override;
 
     std::vector<domain::Goal> find_by_date_range(
         const domain::Date& start_date,
-        const domain::Date& end_date) override;
+        const domain::Date& end_date,
+        std::uint64_t user_id) override;
 
-    void remove(std::uint64_t id) override;
+    void remove(std::uint64_t id,
+                std::uint64_t user_id) override;
 
 private:
     PostgresDatabase& database_;

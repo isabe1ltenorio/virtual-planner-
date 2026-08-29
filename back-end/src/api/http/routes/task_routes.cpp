@@ -203,6 +203,21 @@ application::ListTasksFilter list_tasks_filter_from(
     return filter;
 }
 
+// Dono da requisicao. O gate de autenticacao ja respondeu 401 a quem nao tem
+// sessao, entao chegar aqui sem identidade seria defeito de programacao.
+std::uint64_t caller_id(const ApiServer& api, const httplib::Request& request)
+{
+    const auto user_id = api.authenticated_user_id(request);
+
+    if (!user_id.has_value())
+    {
+        throw std::logic_error(
+            "Task route reached without an authenticated caller.");
+    }
+
+    return *user_id;
+}
+
 } // namespace
 
 void register_task_routes(ApiServer& api)
@@ -217,13 +232,16 @@ void register_task_routes(ApiServer& api)
     // POST /api/tasks
     api.server().Post(
         "/api/tasks",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
+            const std::uint64_t user_id = caller_id(api, request);
+
             application::CreateTaskUseCase create{*tasks};
-            const std::uint64_t id =
-                create.execute(create_task_request_from(request));
+            const std::uint64_t id = create.execute(
+                create_task_request_from(request), user_id);
 
             application::GetTaskUseCase get{*tasks};
-            const domain::Task created = get.execute(id);
+            const domain::Task created = get.execute(id, user_id);
 
             response.status = 201;
             response.set_header("Location", "/api/tasks/" + std::to_string(id));
@@ -234,9 +252,11 @@ void register_task_routes(ApiServer& api)
     // GET /api/tasks?start_date=&end_date=&category=&priority=&status=
     api.server().Get(
         "/api/tasks",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
             application::ListTasksUseCase list{*tasks};
-            const auto result = list.execute(list_tasks_filter_from(request));
+            const auto result = list.execute(
+                list_tasks_filter_from(request), caller_id(api, request));
 
             nlohmann::json body = nlohmann::json::array();
 
@@ -251,9 +271,10 @@ void register_task_routes(ApiServer& api)
     // GET /api/tasks/:id
     api.server().Get(
         R"(/api/tasks/(\d+))",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
             application::GetTaskUseCase get{*tasks};
-            const domain::Task task = get.execute(path_id(request));
+            const domain::Task task = get.execute(path_id(request), caller_id(api, request));
 
             response.set_content(json::to_json(task).dump(), "application/json");
         });
@@ -261,16 +282,18 @@ void register_task_routes(ApiServer& api)
     // PATCH /api/tasks/:id
     api.server().Patch(
         R"(/api/tasks/(\d+))",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
             const std::uint64_t id = path_id(request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             application::GetTaskUseCase get{*tasks};
-            const domain::Task current = get.execute(id);
+            const domain::Task current = get.execute(id, user_id);
 
             application::UpdateTaskUseCase update{*tasks};
-            update.execute(update_task_request_from(request, current));
+            update.execute(update_task_request_from(request, current), user_id);
 
-            const domain::Task updated = get.execute(id);
+            const domain::Task updated = get.execute(id, user_id);
             response.set_content(json::to_json(updated).dump(),
                                  "application/json");
         });
@@ -278,14 +301,16 @@ void register_task_routes(ApiServer& api)
     // PATCH /api/tasks/:id/status
     api.server().Patch(
         R"(/api/tasks/(\d+)/status)",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
             const std::uint64_t id = path_id(request);
+            const std::uint64_t user_id = caller_id(api, request);
 
             application::ChangeTaskStatusUseCase change{*tasks};
-            change.execute(change_task_status_request_from(request, id));
+            change.execute(change_task_status_request_from(request, id), user_id);
 
             application::GetTaskUseCase get{*tasks};
-            const domain::Task updated = get.execute(id);
+            const domain::Task updated = get.execute(id, user_id);
             response.set_content(json::to_json(updated).dump(),
                                  "application/json");
         });
@@ -293,9 +318,10 @@ void register_task_routes(ApiServer& api)
     // DELETE /api/tasks/:id
     api.server().Delete(
         R"(/api/tasks/(\d+))",
-        [tasks](const httplib::Request& request, httplib::Response& response) {
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
             application::DeleteTaskUseCase remove{*tasks};
-            remove.execute(path_id(request));
+            remove.execute(path_id(request), caller_id(api, request));
 
             response.status = 204;
         });

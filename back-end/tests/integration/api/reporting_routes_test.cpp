@@ -1,5 +1,6 @@
 // P-34: teste de integracao HTTP dos endpoints de relatorios e dashboard.
 #include "virtual_planner/api/http/api_server.hpp"
+#include "virtual_planner/api/http/routes/auth_routes.hpp"
 #include "virtual_planner/api/http/routes/reporting_routes.hpp"
 #include "virtual_planner/core/app_config.hpp"
 #include "virtual_planner/domain/entities/goal.hpp"
@@ -8,6 +9,7 @@
 #include "virtual_planner/persistence/memory/repositories.hpp"
 #include "virtual_planner/persistence/repository_set.hpp"
 
+#include "support/authenticated_client.hpp"
 #include "support/expect.hpp"
 
 #include <nlohmann/json.hpp>
@@ -140,29 +142,36 @@ int main()
     persistence::InMemoryReminderRepository reminders;
     persistence::InMemoryUserRepository users;
 
-    goals.save(domain::Goal{
-        0,
-        "meta de relatorio",
-        domain::Category::Study,
-        domain::GoalStatus::Completed,
-        domain::GoalPeriod::Weekly,
-        domain::Date{3, 8, 2026}});
-
-    tasks.save(make_task(
-        1, domain::Date{9, 8, 2026}, domain::TaskStatus::Executed));
-    tasks.save(make_task(
-        2, domain::Date{10, 8, 2026}, domain::TaskStatus::Cancelled));
-
     persistence::RepositorySet repositories{
         &goals, &tasks, &reminders, &users};
     SilentLogger logger;
     const core::AppConfig config{
         "virtual-planner-reporting-test", core::ExecutionProfile::Test};
     http_api::ApiServer server{config, repositories, nullptr, logger};
+    http_api::register_auth_routes(server);
     http_api::register_reporting_routes(server);
 
     // Act
-    with_running_server(server, [](httplib::Client& client) {
+    with_running_server(server, [&goals, &tasks](httplib::Client& client) {
+        // Sem sessao os dois endpoints respondem 401: o relatorio e sempre de
+        // alguem, nunca da base inteira (issue #113).
+        const auto alice =
+            testing::register_and_login(client, "alice@example.com", "Alice");
+        testing::authenticate_as(client, alice);
+
+        goals.save(domain::Goal{
+            0,
+            "meta de relatorio",
+            domain::Category::Study,
+            domain::GoalStatus::Completed,
+            domain::GoalPeriod::Weekly,
+            domain::Date{3, 8, 2026}}, alice.id);
+
+        tasks.save(make_task(
+            1, domain::Date{9, 8, 2026}, domain::TaskStatus::Executed), alice.id);
+        tasks.save(make_task(
+            2, domain::Date{10, 8, 2026}, domain::TaskStatus::Cancelled), alice.id);
+
         const auto weekly = get_json(
             client, "/api/reports?period=weekly&date=2026-08-05");
 
@@ -241,6 +250,32 @@ int main()
             client, "/api/reports?period=daily&date=2026-08-05");
         expect_validation_error(
             client, "/api/reports?period=weekly&date=2026-02-30");
+
+        // --- Isolamento do relatorio (issue #113) -------------------------
+        //
+        // Agregacao vaza sem mostrar registro: mesmo sem ler a meta alheia,
+        // um relatorio global diria a Bob quantas metas existem, de que
+        // categorias e em que turnos. O relatorio dele tem de ser vazio.
+        const auto bob =
+            testing::register_and_login(client, "bob@example.com", "Bob");
+        testing::authenticate_as(client, bob);
+
+        const auto bob_report = get_json(
+            client, "/api/reports?period=weekly&date=2026-08-05");
+
+        VP_EXPECT(bob_report.at("goals_total") == 0,
+                  "another user's goals must not be counted");
+        VP_EXPECT(bob_report.at("tasks_total") == 0,
+                  "another user's tasks must not be counted");
+        VP_EXPECT(bob_report.at("goals_ratio").is_null(),
+                  "with nothing of their own the ratio is null, not zero");
+        VP_EXPECT(bob_report.at("productivity_index").is_null(),
+                  "an empty report must not borrow the other user's index");
+
+        const auto bob_dashboard = get_json(client, "/api/dashboard");
+
+        VP_EXPECT(bob_dashboard.at("tasks_total") == 0,
+                  "the dashboard must be scoped to the caller as well");
     });
 
     return 0;

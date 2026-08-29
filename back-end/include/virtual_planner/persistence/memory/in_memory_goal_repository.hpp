@@ -21,7 +21,8 @@ namespace virtual_planner::persistence {
 class InMemoryGoalRepository final : public GoalRepository
 {
 public:
-    std::uint64_t save(const domain::Goal& goal) override
+    std::uint64_t save(const domain::Goal& goal,
+                       std::uint64_t user_id) override
     {
         const auto id = next_id_++;
 
@@ -34,80 +35,103 @@ public:
         // mudanca de aridade no construtor de Goal quebra esta chamada em
         // tempo de compilacao, entao o risco de esquecer o campo aqui e
         // baixo.
-        goals_.emplace_back(
-            id,
-            goal.description(),
-            goal.category(),
-            goal.status(),
-            goal.period(),
-            goal.reference_date());
+        goals_.push_back(StoredGoal{
+            user_id,
+            domain::Goal{
+                id,
+                goal.description(),
+                goal.category(),
+                goal.status(),
+                goal.period(),
+                goal.reference_date()}});
 
         return id;
     }
 
-    void update(const domain::Goal& goal) override
+    void update(const domain::Goal& goal,
+                std::uint64_t user_id) override
     {
         for (auto& current : goals_)
         {
-            if (current.id() == goal.id())
+            if (current.user_id == user_id && current.goal.id() == goal.id())
             {
-                current = goal;
+                current.goal = goal;
                 return;
             }
         }
     }
 
-    std::optional<domain::Goal> find_by_id(std::uint64_t id) override
+    std::optional<domain::Goal> find_by_id(std::uint64_t id,
+                                           std::uint64_t user_id) override
     {
         for (const auto& goal : goals_)
         {
-            if (goal.id() == id)
+            if (goal.user_id == user_id && goal.goal.id() == id)
             {
-                return goal;
+                return goal.goal;
             }
         }
 
         return std::nullopt;
     }
 
-    std::vector<domain::Goal> find_all() override
-    {
-        return goals_;
-    }
-
-    std::vector<domain::Goal> find_by_date_range(
-        const domain::Date& start,
-        const domain::Date& end) override
+    std::vector<domain::Goal> find_all(std::uint64_t user_id) override
     {
         std::vector<domain::Goal> result;
 
-        for (const auto& goal : goals_)
+        for (const auto& stored : goals_)
         {
-            if (goal.reference_date() >= start &&
-                goal.reference_date() <= end)
+            if (stored.user_id == user_id)
             {
-                result.push_back(goal);
+                result.push_back(stored.goal);
             }
         }
 
         return result;
     }
 
-    void remove(std::uint64_t id) override
+    std::vector<domain::Goal> find_by_date_range(
+        const domain::Date& start,
+        const domain::Date& end,
+        std::uint64_t user_id) override
+    {
+        std::vector<domain::Goal> result;
+
+        for (const auto& stored : goals_)
+        {
+            if (stored.user_id == user_id &&
+                stored.goal.reference_date() >= start &&
+                stored.goal.reference_date() <= end)
+            {
+                result.push_back(stored.goal);
+            }
+        }
+
+        return result;
+    }
+
+    void remove(std::uint64_t id,
+                std::uint64_t user_id) override
     {
         goals_.erase(
             std::remove_if(
                 goals_.begin(),
                 goals_.end(),
-                [id](const domain::Goal& goal)
+                [id, user_id](const StoredGoal& goal)
                 {
-                    return goal.id() == id;
+                    return goal.user_id == user_id && goal.goal.id() == id;
                 }),
             goals_.end());
     }
 
 private:
-    std::vector<domain::Goal> goals_;
+    struct StoredGoal
+    {
+        std::uint64_t user_id;
+        domain::Goal goal;
+    };
+
+    std::vector<StoredGoal> goals_;
     std::uint64_t next_id_ = 1;
 };
 
