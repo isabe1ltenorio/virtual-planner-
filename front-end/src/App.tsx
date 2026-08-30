@@ -21,12 +21,16 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RequireSession } from "./components/RequireSession";
+import { useReminderNotifications } from "./hooks/useReminderNotifications";
 
 type ThemeMode = "light" | "dark" | "system";
 
 function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Avisos de lembrete no horário, enquanto a aba estiver aberta.
+  useReminderNotifications();
   const [theme, setTheme] = useState<ThemeMode>(
     () =>
       (localStorage.getItem("taskly:theme") as ThemeMode | null) ?? "system",

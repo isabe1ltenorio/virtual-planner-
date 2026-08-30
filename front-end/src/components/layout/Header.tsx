@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Plus, Sun, Moon, Monitor, ChevronDown } from "lucide-react";
+import { NotificationToggle } from "../NotificationToggle";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -61,6 +62,8 @@ export const Header: FC<HeaderProps> = ({
       </h2>
 
       <div className="flex items-center gap-2">
+        <NotificationToggle />
+
         {onThemeChange && (
           <div className="relative" ref={ref}>
             <button
