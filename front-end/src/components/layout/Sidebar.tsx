@@ -11,6 +11,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react";
+import { Brand } from "../Brand";
 
 interface NavItem {
   to: string;
@@ -44,11 +45,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export const Sidebar: FC = () => {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border-c bg-surface p-3">
-      <div className="flex items-center gap-2 px-2 py-3">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-          <CheckSquare size={18} strokeWidth={2.5} />
-        </span>
-        <span className="text-lg font-bold tracking-tight text-ink">Taskly</span>
+      <div className="px-2 py-3">
+        <Brand size={30} />
       </div>
 
       <nav className="mt-4 flex flex-1 flex-col gap-1">

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 import { useNavigate } from "react-router";
-import { CheckSquare } from "lucide-react";
 import { login, register } from "../lib/api/authApi";
 import { ApiError } from "../lib/api/httpClient";
 import { Button, Field } from "../components/ui";
+import { Brand } from "../components/Brand";
 
 // A API exige no mínimo 12 caracteres. Validar aqui evita uma ida ao servidor
 // para ouvir o óbvio, mas o servidor continua sendo quem decide.
@@ -63,13 +63,8 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <CheckSquare size={20} strokeWidth={2.5} />
-          </span>
-          <span className="text-xl font-bold tracking-tight text-ink">
-            Taskly
-          </span>
+        <div className="mb-6">
+          <Brand size={34} />
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4 p-6">
