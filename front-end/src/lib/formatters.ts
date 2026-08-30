@@ -1,7 +1,19 @@
-// src/lib/formatters.ts
-import type { Category, Priority, TaskStatus } from "../types/domain";
+import type {
+  Category,
+  GoalPeriod,
+  GoalStatus,
+  Priority,
+  ReminderRecurrence,
+  ReminderType,
+  Shift,
+  TaskStatus,
+} from "../types/domain";
 
-// Converte minutos acumulados do dia (ex: 540) para HH:mm (ex: "09:00")
+/* -------------------------------------------------------------------------- */
+/*  Datas e horários                                                          */
+/* -------------------------------------------------------------------------- */
+
+// Minutos acumulados do dia (540) -> "09:00"
 export function formatMinutesToTime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -15,7 +27,21 @@ export function formatDateForInput(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-// Mapeamentos para exibição na UI em Português
+// "2026-08-30" -> "30 de ago"
+export function formatDateShort(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const months = [
+    "jan", "fev", "mar", "abr", "mai", "jun",
+    "jul", "ago", "set", "out", "nov", "dez",
+  ];
+  return `${d} de ${months[m - 1]}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Rótulos em português — o valor cru continua indo/vindo da API             */
+/* -------------------------------------------------------------------------- */
+
 export const CATEGORY_LABELS: Record<Category, string> = {
   College: "Faculdade",
   Work: "Trabalho",
@@ -23,15 +49,6 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   Leisure: "Lazer",
   PersonalProjects: "Projetos Pessoais",
   Study: "Estudos",
-};
-
-export const CATEGORY_COLORS: Record<Category, string> = {
-  College: "#3B82F6", // Blue
-  Work: "#F59E0B", // Amber
-  Health: "#10B981", // Green
-  Leisure: "#EC4899", // Pink
-  PersonalProjects: "#8B5CF6", // Purple (Identidade)
-  Study: "#6366F1", // Indigo
 };
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
@@ -46,4 +63,69 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   PartiallyExecuted: "Parcial",
   Cancelled: "Cancelada",
   Postponed: "Adiada",
+};
+
+export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
+  "In Progress": "Em andamento",
+  Completed: "Cumprida",
+  "Partially Completed": "Parcialmente cumprida",
+  Failed: "Não cumprida",
+};
+
+export const GOAL_PERIOD_LABELS: Record<GoalPeriod, string> = {
+  Weekly: "Semanal",
+  Monthly: "Mensal",
+  Yearly: "Anual",
+};
+
+export const REMINDER_TYPE_LABELS: Record<ReminderType, string> = {
+  Meeting: "Reunião",
+  PhoneCall: "Ligação",
+  Shopping: "Compras",
+  Study: "Estudos",
+  Exercise: "Exercícios",
+  Assignment: "Entrega",
+};
+
+export const REMINDER_RECURRENCE_LABELS: Record<ReminderRecurrence, string> = {
+  Once: "Único",
+  Daily: "Diário",
+  Weekly: "Semanal",
+  Monthly: "Mensal",
+};
+
+export const SHIFT_LABELS: Record<Shift, string> = {
+  Morning: "Manhã",
+  Afternoon: "Tarde",
+  Evening: "Noite",
+};
+
+/* -------------------------------------------------------------------------- */
+/*  Cor por categoria — mesma cor para tarefa e meta da mesma categoria       */
+/*  Paleta harmônica: 6 matizes com croma parecido, ancorada na marca.        */
+/* -------------------------------------------------------------------------- */
+
+export const CATEGORY_COLORS: Record<Category, string> = {
+  College: "#6366f1", // indigo
+  Work: "#0ea5e9", // azul
+  Health: "#10b981", // verde
+  Leisure: "#f59e0b", // âmbar
+  PersonalProjects: "#9333ea", // roxo (marca)
+  Study: "#f43f5e", // rosa
+};
+
+/* Cores de status — sempre neutras/semânticas, nunca competem com a categoria */
+export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
+  Pending: "#71717a",
+  Executed: "#10b981",
+  PartiallyExecuted: "#f59e0b",
+  Cancelled: "#ef4444",
+  Postponed: "#8b5cf6",
+};
+
+export const GOAL_STATUS_COLORS: Record<GoalStatus, string> = {
+  "In Progress": "#0ea5e9",
+  Completed: "#10b981",
+  "Partially Completed": "#f59e0b",
+  Failed: "#ef4444",
 };

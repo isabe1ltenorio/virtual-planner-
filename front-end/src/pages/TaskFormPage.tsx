@@ -1,12 +1,26 @@
 import { useState, useEffect } from "react";
+import type { FormEvent } from "react";
 import { useNavigate, useParams, Link } from "react-router";
-import type { Task } from "../types/domain";
+import type {
+  Task,
+  Category,
+  Priority,
+  Shift,
+  TaskStatus,
+} from "../types/domain";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
+import {
+  formatDateForInput,
+  formatMinutesToTime,
+  CATEGORY_LABELS,
+  PRIORITY_LABELS,
+  TASK_STATUS_LABELS,
+  SHIFT_LABELS,
+} from "../lib/formatters";
+import { Button, Field, FormPage } from "../components/ui";
 
 export type TaskFormData = Omit<Task, "id">;
 
-// O id fica de fora do formulario: ele vem da rota. Guarda-lo tambem no estado
-// abriria espaco para o corpo da requisicao discordar do caminho.
 function toFormData(task: Task): TaskFormData {
   return {
     description: task.description,
@@ -21,250 +35,253 @@ function toFormData(task: Task): TaskFormData {
   };
 }
 
+// "09:00" <-> minutos, para inputs type="time"
+const toTime = (m?: number) => (m == null ? "" : formatMinutesToTime(m));
+const fromTime = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + (m || 0);
+};
+
 export function TaskFormPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEditing = Boolean(id);
   const [isLoading, setIsLoading] = useState(isEditing);
-  const [timeMode, setTimeMode] = useState<"exact" | "shift">("exact");
+  const today = formatDateForInput();
 
-  const todayStr = new Date().toISOString().split("T")[0];
-
-  const [formData, setFormData] = useState<TaskFormData>({
+  const [form, setForm] = useState<TaskFormData>({
     description: "",
     category: "Study",
-    date: todayStr,
+    date: today,
     startMinutes: 480,
     endMinutes: 540,
     priority: "Medium",
     status: "Pending",
   });
+  const [timeMode, setTimeMode] = useState<"exact" | "shift">("exact");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isEditing && id) {
-      virtualPlannerApi
-        .getTasks()
-        .then((tasks) => {
-          const taskFound = tasks.find((t) => t.id === Number(id));
-          if (taskFound) {
-            setFormData(toFormData(taskFound));
-          }
-        })
-        .catch((err) => console.error("Erro ao carregar tarefa:", err))
-        .finally(() => setIsLoading(false));
-    }
+    if (!isEditing || !id) return;
+    virtualPlannerApi
+      .getTasks()
+      .then((tasks) => {
+        const found = tasks.find((t) => t.id === Number(id));
+        if (found) {
+          setForm(toFormData(found));
+          setTimeMode(found.shift && found.startMinutes == null ? "shift" : "exact");
+        }
+      })
+      .catch((err) => console.error("Erro ao carregar tarefa:", err))
+      .finally(() => setIsLoading(false));
   }, [id, isEditing]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]:
-        name === "startMinutes" || name === "endMinutes"
-          ? Number(value)
-          : value,
-    }));
-  };
+  const set = <K extends keyof TaskFormData>(key: K, value: TaskFormData[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError(null);
 
-    if (formData.date < todayStr) {
-      alert("Não é permitido agendar tarefas para datas no passado.");
+    if (form.date < today) {
+      setError("Não dá para agendar uma tarefa no passado.");
+      return;
+    }
+
+    const payload: TaskFormData =
+      timeMode === "shift"
+        ? {
+            ...form,
+            startMinutes: undefined,
+            endMinutes: undefined,
+          }
+        : { ...form, shift: undefined };
+
+    if (
+      timeMode === "exact" &&
+      payload.startMinutes != null &&
+      payload.endMinutes != null &&
+      payload.endMinutes <= payload.startMinutes
+    ) {
+      setError("O fim precisa ser depois do início.");
       return;
     }
 
     setIsLoading(true);
     try {
       if (isEditing && id) {
-        await virtualPlannerApi.updateTask(Number(id), formData);
+        await virtualPlannerApi.updateTask(Number(id), payload);
       } else {
-        await virtualPlannerApi.createTask(formData);
+        await virtualPlannerApi.createTask(payload);
       }
       navigate("/tasks");
-    } catch (error) {
-      console.error("Erro ao persistir a tarefa:", error);
+    } catch (err) {
+      console.error("Erro ao salvar a tarefa:", err);
+      setError("Não foi possível salvar. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="w-full min-h-full p-6 md:p-8 space-y-6 bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-gray-100 transition-colors flex flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 dark:border-purple-900/30 pb-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          {isEditing ? "Editar Tarefa" : "Nova Tarefa"}
-        </h1>
+    <FormPage
+      title={isEditing ? "Editar tarefa" : "Nova tarefa"}
+      backLink={
         <Link
           to="/tasks"
-          className="text-gray-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm"
+          className="text-sm font-medium text-muted hover:text-ink"
         >
           Voltar
         </Link>
-      </div>
-
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-purple-900/30 rounded-2xl p-6 space-y-6 shadow-sm max-w-2xl"
-      >
-        <div>
-          <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-            Descrição
-          </label>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Field label="Descrição">
           <input
-            type="text"
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
             required
-            className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
+            className="input"
+            placeholder="Ex.: revisar o capítulo 3"
           />
-        </div>
+        </Field>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-              Categoria
-            </label>
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label="Categoria">
             <select
-              name="category"
-              value={formData.category}
-              onChange={handleChange}
-              className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
+              value={form.category}
+              onChange={(e) => set("category", e.target.value as Category)}
+              className="select"
             >
-              <option value="College">Faculdade</option>
-              <option value="Work">Trabalho</option>
-              <option value="Health">Saúde</option>
-              <option value="Leisure">Lazer</option>
-              <option value="PersonalProjects">Projetos Pessoais</option>
-              <option value="Study">Estudos</option>
+              {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABELS[c]}
+                </option>
+              ))}
             </select>
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-              Data
-            </label>
+          <Field label="Data">
             <input
               type="date"
-              name="date"
-              min={todayStr}
-              value={formData.date}
-              onChange={handleChange}
+              min={today}
+              value={form.date}
+              onChange={(e) => set("date", e.target.value)}
               required
-              className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors dark:[color-scheme:dark]"
+              className="input"
             />
-          </div>
-
-          <div className="md:col-span-2 space-y-4">
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-slate-950 p-1.5 rounded-xl border border-gray-300 dark:border-purple-900/30 w-fit">
-              <button
-                type="button"
-                onClick={() => setTimeMode("exact")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${timeMode === "exact" ? "bg-purple-600 text-white shadow-md" : "text-gray-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"}`}
-              >
-                Horário Exato
-              </button>
-              <button
-                type="button"
-                onClick={() => setTimeMode("shift")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${timeMode === "shift" ? "bg-purple-600 text-white shadow-md" : "text-gray-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300"}`}
-              >
-                Turno do Dia
-              </button>
-            </div>
-
-            {timeMode === "exact" ? (
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-                    Início (Minutos)
-                  </label>
-                  <input
-                    type="number"
-                    name="startMinutes"
-                    value={formData.startMinutes}
-                    onChange={handleChange}
-                    min={0}
-                    max={1440}
-                    className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-                    Fim (Minutos)
-                  </label>
-                  <input
-                    type="number"
-                    name="endMinutes"
-                    value={formData.endMinutes}
-                    onChange={handleChange}
-                    min={0}
-                    max={1440}
-                    className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-              Prioridade
-            </label>
-            <select
-              name="priority"
-              value={formData.priority}
-              onChange={handleChange}
-              className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
-            >
-              <option value="Low">Baixa</option>
-              <option value="Medium">Média</option>
-              <option value="High">Alta</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">
-              Status
-            </label>
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="w-full bg-gray-50 dark:bg-slate-950 border border-gray-300 dark:border-purple-900/50 rounded-xl px-4 py-2.5 text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-600 transition-colors"
-            >
-              <option value="Pending">Pendente</option>
-              <option value="Executed">Executada</option>
-              <option value="PartiallyExecuted">Parcialmente Executada</option>
-              <option value="Cancelled">Cancelada</option>
-              <option value="Postponed">Adiada</option>
-            </select>
-          </div>
+          </Field>
         </div>
 
-        <div className="pt-4 border-t border-gray-200 dark:border-purple-900/30 flex justify-end gap-3">
-          <Link
-            to="/tasks"
-            className="px-5 py-2.5 rounded-xl text-sm font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-transparent hover:bg-purple-100 dark:hover:bg-gray-800 transition-colors"
-          >
+        <div>
+          <span className="field-label">Quando</span>
+          <div className="mb-3 inline-flex rounded-lg border border-border-c bg-surface p-0.5">
+            {(["exact", "shift"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setTimeMode(mode)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  timeMode === mode
+                    ? "bg-brand-600 text-white"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {mode === "exact" ? "Horário" : "Turno"}
+              </button>
+            ))}
+          </div>
+
+          {timeMode === "exact" ? (
+            <div className="grid grid-cols-2 gap-5">
+              <Field label="Início">
+                <input
+                  type="time"
+                  value={toTime(form.startMinutes)}
+                  onChange={(e) =>
+                    set("startMinutes", fromTime(e.target.value))
+                  }
+                  className="input"
+                />
+              </Field>
+              <Field label="Fim">
+                <input
+                  type="time"
+                  value={toTime(form.endMinutes)}
+                  onChange={(e) => set("endMinutes", fromTime(e.target.value))}
+                  className="input"
+                />
+              </Field>
+            </div>
+          ) : (
+            <Field
+              label="Turno do dia"
+              hint="A tarefa fica no turno, sem horário específico."
+            >
+              <select
+                value={form.shift ?? "Morning"}
+                onChange={(e) => set("shift", e.target.value as Shift)}
+                className="select"
+              >
+                {(Object.keys(SHIFT_LABELS) as Shift[]).map((s) => (
+                  <option key={s} value={s}>
+                    {SHIFT_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <Field label="Prioridade">
+            <select
+              value={form.priority}
+              onChange={(e) => set("priority", e.target.value as Priority)}
+              className="select"
+            >
+              {(Object.keys(PRIORITY_LABELS) as Priority[]).map((p) => (
+                <option key={p} value={p}>
+                  {PRIORITY_LABELS[p]}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Status">
+            <select
+              value={form.status}
+              onChange={(e) => set("status", e.target.value as TaskStatus)}
+              className="select"
+            >
+              {(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {TASK_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-500" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-border-c pt-4">
+          <Link to="/tasks" className="btn btn-ghost">
             Cancelar
           </Link>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-6 py-2.5 rounded-xl text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 shadow-md shadow-purple-600/30 transition-all disabled:opacity-50"
-          >
+          <Button type="submit" disabled={isLoading}>
             {isLoading
-              ? "Salvando..."
+              ? "Salvando…"
               : isEditing
-                ? "Salvar Alterações"
-                : "Criar Tarefa"}
-          </button>
+                ? "Salvar alterações"
+                : "Criar tarefa"}
+          </Button>
         </div>
       </form>
-    </div>
+    </FormPage>
   );
 }

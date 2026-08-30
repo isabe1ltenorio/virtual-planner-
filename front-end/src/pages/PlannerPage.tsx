@@ -1,23 +1,31 @@
 import { useEffect, useState } from "react";
+import { CalendarDays, TriangleAlert } from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
+import {
+  formatDateForInput,
+  formatMinutesToTime,
+  SHIFT_LABELS,
+} from "../lib/formatters";
+import type { Shift } from "../types/domain";
+import { Card, EmptyState, LoadingState, PageHeader } from "../components/ui";
 
-type TimeSlotItem = {
+type AgendaItem = {
   id: string;
   type: "Task" | "Reminder";
   description: string;
-  startMinutes: number;
-  endMinutes: number;
+  startMinutes?: number;
+  endMinutes?: number;
+  shift?: Shift;
   hasConflict?: boolean;
 };
 
 export function PlannerPage() {
-  const [items, setItems] = useState<TimeSlotItem[]>([]);
+  const [items, setItems] = useState<AgendaItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const SELECTED_DATE = new Date().toISOString().split("T")[0];
+  const date = formatDateForInput();
 
   useEffect(() => {
-    async function loadAgenda() {
+    (async () => {
       setIsLoading(true);
       try {
         const [tasks, reminders] = await Promise.all([
@@ -25,121 +33,121 @@ export function PlannerPage() {
           virtualPlannerApi.getReminders(),
         ]);
 
-        // Tarefa agendada por turno nao tem intervalo em minutos, e o
-        // planejamento e uma linha do tempo: sem inicio e fim ela nao tem
-        // onde ser desenhada. Antes disso os dois campos entravam como
-        // undefined — a deteccao de conflito comparava undefined e nunca
-        // acusava nada, e a ordenacao virava NaN.
-        const hasInterval = (
-            item: { startMinutes?: number; endMinutes?: number },
-        ): boolean =>
-          item.startMinutes !== undefined && item.endMinutes !== undefined;
-
-        const dayTasks: TimeSlotItem[] = tasks
-          .filter((t) => t.date === SELECTED_DATE && hasInterval(t))
+        const dayTasks: AgendaItem[] = tasks
+          .filter((t) => t.date === date)
           .map((t) => ({
-            ...t,
             id: `task-${t.id}`,
             type: "Task",
-            startMinutes: t.startMinutes as number,
-            endMinutes: t.endMinutes as number,
+            description: t.description,
+            startMinutes: t.startMinutes,
+            endMinutes: t.endMinutes,
+            shift: t.shift,
           }));
 
-        const dayReminders: TimeSlotItem[] = reminders
-          .filter((r) => r.date === SELECTED_DATE)
-          .map((r) => ({ ...r, id: `rem-${r.id}`, type: "Reminder" }));
+        const dayReminders: AgendaItem[] = reminders
+          .filter((r) => r.date === date)
+          .map((r) => ({
+            id: `rem-${r.id}`,
+            type: "Reminder",
+            description: r.description,
+            startMinutes: r.startMinutes,
+            endMinutes: r.endMinutes,
+          }));
 
-        let agenda = [...dayTasks, ...dayReminders];
+        const agenda = [...dayTasks, ...dayReminders].map((item, i, arr) => ({
+          ...item,
+          hasConflict:
+            item.startMinutes != null &&
+            item.endMinutes != null &&
+            arr.some(
+              (other, j) =>
+                i !== j &&
+                other.startMinutes != null &&
+                other.endMinutes != null &&
+                item.startMinutes! < other.endMinutes! &&
+                item.endMinutes! > other.startMinutes!,
+            ),
+        }));
 
-        agenda = agenda.map((item, i, arr) => {
-          const hasConflict = arr.some(
-            (other, j) =>
-              i !== j &&
-              item.startMinutes < other.endMinutes &&
-              item.endMinutes > other.startMinutes,
-          );
-          return { ...item, hasConflict };
-        });
-
-        agenda.sort((a, b) => a.startMinutes - b.startMinutes);
+        agenda.sort(
+          (a, b) => (a.startMinutes ?? 1e9) - (b.startMinutes ?? 1e9),
+        );
         setItems(agenda);
       } catch (error) {
-        console.error("Erro ao carregar planejamento:", error);
+        console.error("Erro ao carregar o planejamento:", error);
       } finally {
         setIsLoading(false);
       }
-    }
-    loadAgenda();
-  }, [SELECTED_DATE]);
-
-  const formatTime = (mins: number) => {
-    const h = Math.floor(mins / 60)
-      .toString()
-      .padStart(2, "0");
-    const m = (mins % 60).toString().padStart(2, "0");
-    return `${h}:${m}`;
-  };
+    })();
+  }, [date]);
 
   return (
-    <div className="p-6 space-y-6 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-full transition-colors">
-      <header className="border-b border-gray-200 dark:border-purple-900/30 pb-4">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Planejamento Diário
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Agenda para {SELECTED_DATE}
-        </p>
-      </header>
+    <>
+      <PageHeader
+        title="Planejamento"
+        subtitle={new Date().toLocaleDateString("pt-BR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })}
+      />
 
-      <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 border border-gray-200 dark:border-gray-800 shadow-sm">
-        {isLoading ? (
-          <p className="text-purple-600 dark:text-purple-400 animate-pulse">
-            Carregando horários...
-          </p>
-        ) : items.length === 0 ? (
-          <p className="text-gray-500 italic">
-            Nenhum evento agendado para hoje.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-center gap-4 p-4 rounded-xl border-l-4 shadow-sm transition-colors ${
-                  item.hasConflict
-                    ? "bg-red-50 dark:bg-red-950/20 border-red-500"
-                    : "bg-white dark:bg-gray-800 border-purple-500"
-                }`}
-              >
-                <div className="w-24 shrink-0 text-center">
-                  <span className="block text-sm font-bold text-purple-700 dark:text-purple-300">
-                    {formatTime(item.startMinutes)}
-                  </span>
-                  <span className="block text-xs text-gray-500">
-                    até {formatTime(item.endMinutes)}
-                  </span>
-                </div>
-
-                <div className="flex-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-1">
-                    {item.type === "Task" ? "Tarefa" : "Lembrete"}
-                  </span>
-                  <p
-                    className={`text-lg font-medium ${item.hasConflict ? "text-red-700 dark:text-red-200" : "text-gray-900 dark:text-gray-200"}`}
-                  >
-                    {item.description}
-                  </p>
-                  {item.hasConflict && (
-                    <span className="text-xs text-red-600 dark:text-red-400 font-medium bg-red-100 dark:bg-red-950/50 px-2 py-0.5 rounded mt-1 inline-block">
-                      ⚠️ Conflito de Horário detectado
+      {isLoading ? (
+        <LoadingState label="Montando a agenda…" />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={<CalendarDays size={28} strokeWidth={1.5} />}
+          title="Dia livre"
+          description="Nenhuma tarefa ou lembrete agendado para hoje."
+        />
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <Card
+              key={item.id}
+              className={`flex items-center gap-4 p-4 ${
+                item.hasConflict
+                  ? "border-red-300 dark:border-red-900"
+                  : ""
+              }`}
+            >
+              <div className="w-20 shrink-0 text-center">
+                {item.startMinutes != null ? (
+                  <>
+                    <span className="stat-value block text-sm font-semibold text-ink">
+                      {formatMinutesToTime(item.startMinutes)}
                     </span>
-                  )}
-                </div>
+                    {item.endMinutes != null && (
+                      <span className="block text-xs text-subtle">
+                        {formatMinutesToTime(item.endMinutes)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs font-medium text-muted">
+                    {item.shift ? SHIFT_LABELS[item.shift] : "—"}
+                  </span>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-medium uppercase tracking-wide text-subtle">
+                  {item.type === "Task" ? "Tarefa" : "Lembrete"}
+                </span>
+                <p className="truncate font-medium text-ink">
+                  {item.description}
+                </p>
+                {item.hasConflict && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                    <TriangleAlert size={12} />
+                    Conflito de horário
+                  </span>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
