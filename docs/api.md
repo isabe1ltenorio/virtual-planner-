@@ -2,13 +2,69 @@
 
 Este documento define o formato JSON usado na fronteira HTTP do backend.
 
-Hoje ele cobre os **tipos compartilhados** — enums e value objects de domínio
-(P-29.0) —, o endpoint `GET /api/health` (P-28) e os endpoints de relatórios
-`GET /api/reports` e `GET /api/dashboard` (P-34). A serialização de cada
-entidade (`Goal`, `Task`, `Reminder`, `User`) é definida pelas issues P-29.1 a
-P-29.4 e deve, obrigatoriamente, reutilizar as regras abaixo. Os endpoints de
-domínio pertencem aos donos de cada módulo. O contrato REST consolidado é
-escrito na P-56.
+Ele é a **fonte de verdade do contrato REST** para quem consome a API — em
+particular o frontend. O que não estiver aqui não existe na fronteira HTTP, e o
+que estiver aqui foi conferido contra o código, endpoint por endpoint.
+
+## Índice dos endpoints
+
+Estes são **todos** os endpoints registrados hoje. A coluna "Sessão" diz se a
+rota exige o cookie `vp_session`; ver [Autenticação](#autenticação).
+
+| Método | Caminho | Sessão | Sucesso | Erros próprios |
+|---|---|---|---|---|
+| `OPTIONS` | qualquer caminho | não | `204` | `403` origem não autorizada |
+| `GET` | `/api/health` | não | `200` | — |
+| `POST` | `/api/auth/register` | não | `201` | `400` |
+| `POST` | `/api/auth/login` | não | `204` | `400`, `401` |
+| `POST` | `/api/auth/logout` | sim | `204` | — |
+| `GET` | `/api/auth/me` | sim | `200` | `401` sessão órfã |
+| `GET` | `/api/goals` | sim | `200` | `400` |
+| `POST` | `/api/goals` | sim | `201` | `400` |
+| `GET` | `/api/goals/:id` | sim | `200` | `404` |
+| `PATCH` | `/api/goals/:id` | sim | `200` | `400`, `404` |
+| `PATCH` | `/api/goals/:id/status` | sim | `200` | `400`, `404` |
+| `DELETE` | `/api/goals/:id` | sim | `204` | `404` |
+| `GET` | `/api/tasks` | sim | `200` | `400` |
+| `POST` | `/api/tasks` | sim | `201` | `400` |
+| `GET` | `/api/tasks/:id` | sim | `200` | `404` |
+| `PATCH` | `/api/tasks/:id` | sim | `200` | `400`, `404` |
+| `PATCH` | `/api/tasks/:id/status` | sim | `200` | `400`, `404` |
+| `DELETE` | `/api/tasks/:id` | sim | `204` | `404` |
+| `GET` | `/api/reminders` | sim | `200` | `400` |
+| `POST` | `/api/reminders` | sim | `201` | `400` |
+| `GET` | `/api/reminders/:id` | sim | `200` | `400`, `404` |
+| `PUT` | `/api/reminders/:id` | sim | `200` | `400`, `404` |
+| `DELETE` | `/api/reminders/:id` | sim | `204` | `400`, `404` |
+| `GET` | `/api/reports` | sim | `200` | `400` |
+| `GET` | `/api/dashboard` | sim | `200` | — |
+
+Toda rota autenticada devolve `401` sem sessão, e toda rota pode devolver `500`
+— os dois casos valem para a tabela inteira e não se repetem em cada linha.
+
+### Um id não numérico não responde igual em toda a API
+
+`Goal` e `Task` registram a rota como `(\d+)`: `/api/goals/abc` simplesmente
+**não é uma rota registrada**, e cai no comportamento de caminho desconhecido
+descrito em [Autenticação](#autenticação) — `401` sem sessão, `404` com sessão.
+
+`Reminder` registra `([^/]*)` e valida o id no handler, então
+`/api/reminders/abc` responde **400** com `code="validation_error"`.
+
+A diferença é real e o cliente precisa saber dela. Não a esconda tratando `404`
+e `400` como o mesmo caso.
+
+## O que ainda não existe
+
+Documentar o que não existe é tão parte do contrato quanto documentar o que
+existe: sem isto o cliente descobre a ausência em tempo de execução.
+
+`User` não tem endpoints de CRUD. O que existe é o que `/api/auth/*` expõe:
+criar conta, abrir e encerrar sessão e ler o próprio perfil. Não há como listar
+usuários, editar nome ou e-mail, nem trocar senha pela API.
+
+`Goal`, `Task` e `Reminder` têm representação JSON **e** endpoints, todos na
+tabela acima.
 
 ## Onde está o código
 
@@ -16,10 +72,14 @@ escrito na P-56.
   e `back-end/src/api/json/shared_json.cpp`
 - Servidor: `back-end/include/virtual_planner/api/http/api_server.hpp` e
   `back-end/src/api/http/api_server.cpp`
+- Autenticação: `back-end/src/api/http/routes/auth_routes.cpp`
+- Rotas de `Goal`: `back-end/src/api/http/routes/goal_routes.cpp`
+- Rotas de `Task`: `back-end/src/api/http/routes/task_routes.cpp`
 - Relatórios: `back-end/include/virtual_planner/api/http/routes/reporting_routes.hpp`
   e `back-end/src/api/http/routes/reporting_routes.cpp`
-- Endpoints de Reminder: `back-end/include/virtual_planner/api/http/routes/reminder_routes.hpp`
+- Endpoints de `Reminder`: `back-end/include/virtual_planner/api/http/routes/reminder_routes.hpp`
   e `back-end/src/api/http/routes/reminder_routes.cpp`
+- Mapeamento de erro: `back-end/src/api/http/error_response.cpp`
 - Testes: `back-end/tests/unit/api/json/shared_json_test.cpp` e
   `back-end/tests/integration/api/api_server_test.cpp`; os endpoints de
   relatórios são cobertos por
@@ -63,6 +123,19 @@ Um `VP_HTTP_PORT` que não seja um inteiro entre 0 e 65535 aborta a subida com
 `shared::ConfigError` e mensagem explícita — o servidor não sobe em uma porta
 que ninguém pediu.
 
+## Limites
+
+Valem para toda requisição, e estão em
+`back-end/include/virtual_planner/api/http/api_server.hpp`:
+
+| Limite | Valor | Motivo |
+|---|---|---|
+| Corpo da requisição | 1 MiB | Sem teto explícito, uma única requisição esgota a memória do processo |
+| Timeout de leitura e de escrita | 10 s | Uma conexão que abre e não fala prende uma thread do pool indefinidamente |
+
+Um corpo acima do teto é recusado pelo próprio httplib, antes de chegar ao
+handler.
+
 ## Autenticação
 
 Toda rota exige sessão, com três exceções: `GET /api/health`,
@@ -97,6 +170,11 @@ Responde **201** com `{"id": 1, "email": "alice@example.com"}`. A senha exige
 no mínimo 12 caracteres e é guardada como PBKDF2-SHA256 com salt por usuário e
 210 000 iterações — nunca em texto claro. Registrar **não** abre sessão.
 
+E-mail já cadastrado responde **400** com `code="validation_error"`, e não
+`409`: o repositório sinaliza o caso com `std::invalid_argument`, que o
+mapeamento global trata como entrada inválida. Ramifique pelo `code`, não pelo
+status, se precisar distinguir esse caso de um campo faltando.
+
 ### `POST /api/auth/login`
 
 ```json
@@ -116,10 +194,27 @@ entregaria uma lista de quem tem conta.
 Responde **204** e invalida a sessão no servidor, além de expirar o cookie. Não
 depende de o cookie ainda ser válido.
 
+### `GET /api/auth/me`
+
+Quem é o dono da sessão atual. Responde **200**:
+
+```json
+{ "id": 1, "name": "Alice", "email": "alice@example.com" }
+```
+
+Existe para o frontend saber se há sessão **antes** de montar a tela. Sem ele, a
+única forma de descobrir que a sessão caiu seria tomar `401` numa chamada de
+domínio — com o dashboard já renderizado e vazio.
+
+O caso de borda tem resposta própria: se a sessão apontar para um usuário que
+não existe mais, o servidor encerra a sessão e responde **401** com
+`code="unauthorized"`. Isso acontece hoje a cada reinício do processo, porque
+`UserRepository` só existe em memória.
+
 ## Escopo por dono
 
-Todo recurso pertence a um usuário. As rotas de `Goal` e de relatórios operam
-exclusivamente sobre o que é de quem chamou.
+As rotas de `Goal`, de `Task` e de relatórios operam exclusivamente sobre o que
+é de quem chamou.
 
 Pedir um recurso de outra pessoa responde **404**, e não 403: um 403
 confirmaria ao chamador que aquele identificador existe. Vale para leitura,
@@ -128,6 +223,20 @@ atualização, mudança de status e remoção.
 A verificação vive na assinatura do repositório
 (`find_by_id(id, user_id)`), e não em cada handler — assim uma rota nova não
 consegue esquecer de verificar, porque não compila sem o dono.
+
+### `Reminder` é a exceção, e isso é um defeito conhecido
+
+`ReminderRepository` **não recebe o dono em nenhum método**
+(`back-end/include/virtual_planner/persistence/reminder_repository.hpp`).
+Na prática, com dois usuários registrados, os dois enxergam, editam e removem
+os mesmos lembretes.
+
+Está documentado aqui porque é o contrato observável hoje, não porque seja
+aceitável. É a mesma classe de falha que a issue #112 fechou para `Goal`, e
+precisa da mesma correção: o dono na assinatura do repositório, e não uma
+checagem repetida em cada handler.
+
+**Não construa nada sobre a suposição de que lembrete é privado.**
 
 ## `GET /api/health`
 
@@ -317,7 +426,8 @@ um só lugar.
 
 Toda falha de desserialização lança `std::invalid_argument` — o mesmo tipo que
 os `*_from_string` do domínio e os construtores de `Date` e `TimeSlot` já
-lançam. O mapeamento desse erro para uma resposta HTTP é assunto da P-35.
+lançam. O mapeamento desse erro para uma resposta HTTP está em
+[Erros](#erros): `400` com `code="validation_error"`.
 
 ## Enums
 
@@ -328,7 +438,7 @@ exatamente o texto de `domain::to_string`.
 |---|---|
 | `Category` | `"College"`, `"Work"`, `"Health"`, `"Leisure"`, `"PersonalProjects"`, `"Study"` |
 | `GoalPeriod` | `"Weekly"`, `"Monthly"`, `"Yearly"` |
-| `GoalStatus` | `"InProgress"`, `"Completed"`, `"PartiallyCompleted"`, `"Failed"` |
+| `GoalStatus` | `"In Progress"`, `"Completed"`, `"Partially Completed"`, `"Failed"` |
 | `Priority` | `"Low"`, `"Medium"`, `"High"` |
 | `ReminderRecurrence` | `"Once"`, `"Daily"`, `"Weekly"`, `"Monthly"` |
 | `ReminderType` | `"Meeting"`, `"PhoneCall"`, `"Shopping"`, `"Study"`, `"Exercise"`, `"Assignment"` |

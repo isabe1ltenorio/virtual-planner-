@@ -30,7 +30,10 @@ virtual_planner_add_sources(
 )
 
 # User
-# virtual_planner_add_sources(application/user/...)
+virtual_planner_add_sources(
+  application/user/get_user_profile_use_case.cpp
+  application/user/update_user_profile_use_case.cpp
+)
 
 # Reporting
 virtual_planner_add_sources(

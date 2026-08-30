@@ -1,5 +1,7 @@
 #include "virtual_planner/persistence/memory/repositories.hpp"
 
+#include <stdexcept>
+
 #include "support/expect.hpp"
 
 using namespace virtual_planner;
@@ -62,6 +64,54 @@ int main()
     repository.remove(4242);
 
     VP_EXPECT(repository.find_all().size() == 1, "remove of an unknown id must be a no-op");
+
+    // O repositorio guarda o usuario e a credencial em duas listas. Quem
+    // atualiza o perfil chama save(), que ate aqui so mexia em users_ — e o
+    // e-mail de login ficava para tras. Na pratica: trocar o e-mail pelo
+    // perfil derrubava o login com o e-mail novo e mantinha o antigo valendo.
+    persistence::InMemoryUserRepository credentialed;
+
+    const std::uint64_t gabriel =
+        credentialed.create(domain::User{0, "Gabriel", "gabriel@example.com"}, "hash-do-gabriel");
+
+    domain::User renamed = *credentialed.find_by_id(gabriel);
+    renamed.update_email("gabriel.severo@example.com");
+    credentialed.save(renamed);
+
+    const auto by_new_email =
+        credentialed.find_credentials_by_email("gabriel.severo@example.com");
+
+    VP_EXPECT(by_new_email.has_value(),
+              "save must move the credential to the new email");
+    VP_EXPECT(by_new_email->user_id == gabriel,
+              "the moved credential must still point at the same user");
+    VP_EXPECT(by_new_email->password_hash == "hash-do-gabriel",
+              "changing the email must not touch the password hash");
+    VP_EXPECT(!credentialed.find_credentials_by_email("gabriel@example.com").has_value(),
+              "the old email must stop authenticating");
+
+    // Dois usuarios nao podem terminar com o mesmo e-mail: e ele que identifica
+    // quem faz login. create() ja rejeitava o caso; save() nao.
+    const std::uint64_t bel =
+        credentialed.create(domain::User{0, "Bel", "bel@example.com"}, "hash-da-bel");
+
+    domain::User collides = *credentialed.find_by_id(bel);
+    collides.update_email("gabriel.severo@example.com");
+
+    bool rejected = false;
+
+    try
+    {
+        credentialed.save(collides);
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejected = true;
+    }
+
+    VP_EXPECT(rejected, "save must reject an email already owned by another user");
+    VP_EXPECT(credentialed.find_by_id(bel)->email() == "bel@example.com",
+              "a rejected save must leave the user untouched");
 
     return 0;
 }

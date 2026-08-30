@@ -46,10 +46,6 @@ function MainLayout() {
   // Mapeia a URL atual para a aba ativa do AppShell
   const currentTab = location.pathname.split("/")[1] || "dashboard";
 
-  const handleTabChange = (tab: string) => {
-    navigate(tab === "dashboard" ? "/" : `/${tab}`);
-  };
-
   const handleQuickCreate = () => {
     navigate("/tasks/new");
   };
@@ -57,7 +53,6 @@ function MainLayout() {
   return (
     <AppShell
       currentTab={currentTab}
-      setCurrentTab={handleTabChange}
       theme={theme}
       onThemeChange={setTheme}
       onQuickCreate={handleQuickCreate}

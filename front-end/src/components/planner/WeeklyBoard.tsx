@@ -1,5 +1,4 @@
 import type { Task } from "../../types/domain";
-import { formatDateForInput } from "../../lib/formatters";
 import { TaskCard } from "./TaskCard";
 
 interface WeeklyBoardProps {
@@ -7,26 +6,15 @@ interface WeeklyBoardProps {
 }
 
 export function WeeklyBoard({ tasks }: WeeklyBoardProps) {
-  const today = new Date();
-  const monday = new Date(today);
-  const daysSinceMonday = (today.getDay() + 6) % 7;
-  monday.setDate(today.getDate() - daysSinceMonday);
-
-  const dayLabels = [
-    { label: "Segunda", color: "text-blue-400" },
-    { label: "Terça", color: "text-emerald-400" },
-    { label: "Quarta", color: "text-amber-400" },
-    { label: "Quinta", color: "text-orange-400" },
-    { label: "Sexta", color: "text-rose-400" },
-    { label: "Sábado", color: "text-purple-400" },
-    { label: "Domingo", color: "text-purple-400" },
+  const daysOfWeek = [
+    { key: "2026-08-17", label: "Segunda", color: "text-blue-400" },
+    { key: "2026-08-18", label: "Terça", color: "text-emerald-400" },
+    { key: "2026-08-19", label: "Quarta", color: "text-amber-400" },
+    { key: "2026-08-20", label: "Quinta", color: "text-orange-400" },
+    { key: "2026-08-21", label: "Sexta", color: "text-rose-400" },
+    { key: "2026-08-22", label: "Sábado", color: "text-purple-400" },
+    { key: "2026-08-23", label: "Domingo", color: "text-purple-400" },
   ];
-
-  const daysOfWeek = dayLabels.map((day, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return { ...day, key: formatDateForInput(date) };
-  });
 
   const getTasksForDay = (dateString: string) => {
     return tasks.filter((task) => task.date === dateString);
