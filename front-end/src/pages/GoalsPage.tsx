@@ -19,8 +19,8 @@ import {
   Field,
   LoadingState,
   PageHeader,
-  buttonClass,
 } from "../components/ui";
+import { buttonClass } from "../components/buttonStyles";
 
 export function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);

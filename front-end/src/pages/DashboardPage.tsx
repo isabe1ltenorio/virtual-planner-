@@ -18,8 +18,8 @@ import {
   LoadingState,
   PageHeader,
   StatCard,
-  buttonClass,
 } from "../components/ui";
+import { buttonClass } from "../components/buttonStyles";
 
 export function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);

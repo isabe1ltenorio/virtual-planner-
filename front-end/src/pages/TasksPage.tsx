@@ -20,8 +20,8 @@ import {
   Field,
   LoadingState,
   PageHeader,
-  buttonClass,
 } from "../components/ui";
+import { buttonClass } from "../components/buttonStyles";
 
 type View = "list" | "board";
 type GroupBy = "category" | "status";
@@ -47,19 +47,12 @@ export function TasksPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
 
   useEffect(() => {
-    load();
+    virtualPlannerApi
+      .getTasks()
+      .then(setTasks)
+      .catch((e) => console.error("Erro ao buscar tarefas:", e))
+      .finally(() => setIsLoading(false));
   }, []);
-
-  async function load() {
-    setIsLoading(true);
-    try {
-      setTasks(await virtualPlannerApi.getTasks());
-    } catch (e) {
-      console.error("Erro ao buscar tarefas:", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function handleDelete(id: number) {
     try {

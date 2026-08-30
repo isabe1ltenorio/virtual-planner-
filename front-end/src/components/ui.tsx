@@ -3,22 +3,11 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from "react";
+import { buttonClass, type ButtonVariant } from "./buttonStyles";
 
 /* -------------------------------------------------------------------------- */
 /*  Button                                                                    */
 /* -------------------------------------------------------------------------- */
-
-type ButtonVariant = "primary" | "outline" | "ghost" | "danger";
-
-export function buttonClass(variant: ButtonVariant = "primary"): string {
-  const map: Record<ButtonVariant, string> = {
-    primary: "btn btn-primary",
-    outline: "btn btn-outline",
-    ghost: "btn btn-ghost",
-    danger: "btn btn-danger",
-  };
-  return map[variant];
-}
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
