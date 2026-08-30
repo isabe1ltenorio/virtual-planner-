@@ -22,10 +22,10 @@ export const AppShell: FC<AppShellProps> = ({
   const activeTab = currentTab ? currentTab.split("/")[0] : "dashboard";
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-gray-950 text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-300">
+    <div className="flex h-screen overflow-hidden bg-bg text-ink">
       <Sidebar />
 
-      <div className="flex flex-col flex-1 w-full overflow-hidden">
+      <div className="flex w-full flex-1 flex-col overflow-hidden">
         <Header
           currentTab={activeTab}
           onQuickCreate={onQuickCreate}
@@ -33,8 +33,10 @@ export const AppShell: FC<AppShellProps> = ({
           onThemeChange={onThemeChange}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 dark:bg-gray-950 transition-colors duration-300">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-6xl space-y-6 px-6 py-6 md:px-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
