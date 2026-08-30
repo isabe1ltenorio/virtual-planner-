@@ -2,13 +2,12 @@
  * Identidade visual do Taskly, num lugar só.
  *
  * TROCAR PELA SUA LOGO:
- *  - Logo COMPLETA (símbolo + nome "Taskly" na mesma arte):
- *      substitua  front-end/public/logo.svg  pela sua.
- *      Se for PNG, salve como public/logo.png e troque o src abaixo.
- *      Deixe `wordmark` como está (false) — o nome já vem na imagem.
- *  - Só o SÍMBOLO (sem o nome):
- *      substitua public/logo.svg pelo seu símbolo e use <Brand wordmark />
- *      (aí o texto "Taskly" é desenhado ao lado, na fonte Gilroy).
+ *  - Tema claro:  front-end/public/logo.svg
+ *  - Tema escuro: front-end/public/logo-tema-escuro.svg  (versão com o texto
+ *    claro; a troca é automática pela classe .dark no <html>)
+ *  Se for PNG, salve como .png e ajuste os src abaixo.
+ *  `wordmark` false = o nome já vem na imagem. true = desenha "Taskly" ao lado
+ *  (útil se sua logo for só o símbolo).
  *
  * `size` = altura da logo em px; a largura se ajusta sozinha.
  */
@@ -21,12 +20,25 @@ export function Brand({
   wordmark?: boolean;
   className?: string;
 }) {
+  const imgStyle = { height: size, width: "auto" as const };
+
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
       <img
         src="/logo.svg"
         alt="Taskly"
-        style={{ height: size, width: "auto" }}
+        style={imgStyle}
+        className="block dark:hidden"
+      />
+      <img
+        src="/logo-tema-escuro.svg"
+        alt="Taskly"
+        style={imgStyle}
+        className="hidden dark:block"
+        onError={(e) => {
+          // Sem o arquivo do tema escuro, cai na logo clara em vez de quebrar.
+          e.currentTarget.src = "/logo.svg";
+        }}
       />
       {wordmark && (
         <span
