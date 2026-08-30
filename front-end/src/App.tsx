@@ -21,25 +21,39 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RequireSession } from "./components/RequireSession";
+import { useReminderNotifications } from "./hooks/useReminderNotifications";
 
 type ThemeMode = "light" | "dark" | "system";
 
 function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState<ThemeMode>("dark");
 
-  // Sincroniza o tema com o documento HTML
+  // Avisos de lembrete no horário, enquanto a aba estiver aberta.
+  useReminderNotifications();
+  const [theme, setTheme] = useState<ThemeMode>(
+    () =>
+      (localStorage.getItem("taskly:theme") as ThemeMode | null) ?? "system",
+  );
+
+  // Sincroniza o tema com o <html> e acompanha a preferência do sistema
+  // enquanto o modo for "system".
   useEffect(() => {
     const root = window.document.documentElement;
-    const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
 
-    root.classList.remove("dark");
+    const apply = () => {
+      const dark =
+        theme === "dark" || (theme === "system" && media.matches);
+      root.classList.toggle("dark", dark);
+    };
 
-    if (theme === "dark" || (theme === "system" && systemPrefersDark)) {
-      root.classList.add("dark");
+    apply();
+    localStorage.setItem("taskly:theme", theme);
+
+    if (theme === "system") {
+      media.addEventListener("change", apply);
+      return () => media.removeEventListener("change", apply);
     }
   }, [theme]);
 

@@ -1,39 +1,343 @@
 @import "tailwindcss";
 
-/* 1. Configuração de modo escuro (vindo da develop) */
-@custom-variant dark (.dark &);
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* 2. Nossa paleta de cores (vindo da main) */
-@theme {
-  --color-primary-50: #f5f3ff;
-  --color-primary-100: #ede9fe;
-  --color-primary-500: #8b5cf6;
-  --color-primary-600: #7c3aed;
-  --color-primary-700: #6d28d9;
+/* ------------------------------------------------------------------ *
+ *  Tipografia — Gilroy                                              *
+ *  Coloque os arquivos em front-end/public/fonts/:                  *
+ *    Gilroy-Regular.woff2  Gilroy-Medium.woff2                      *
+ *    Gilroy-SemiBold.woff2 Gilroy-Bold.woff2                        *
+ *  Sem eles, cai no fallback (Plus Jakarta Sans / Inter / system).  *
+ * ------------------------------------------------------------------ */
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/Gilroy-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
-/* 3. Estilos globais para tags HTML puras (vindo da develop) */
+/* ------------------------------------------------------------------ *
+ *  Tokens de tema                                                   *
+ * ------------------------------------------------------------------ */
+:root {
+  /* Superfícies e texto — claro */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border-c: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text-c: #18181b;
+  --text-muted: #71717a;
+  --text-subtle: #a1a1aa;
+  --ring: rgb(147 51 234 / 0.35);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1rem;
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 14px -3px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  --bg: #09090b;
+  --surface: #18181b;
+  --surface-2: #212124;
+  --border-c: #27272a;
+  --border-strong: #3f3f46;
+  --text-c: #fafafa;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+  --ring: rgb(192 132 252 / 0.4);
+
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 6px 20px -4px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+  --font-sans: "Gilroy", "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Marca — escala purple do Tailwind, ancorada em #9333ea */
+  --color-brand-50: #faf5ff;
+  --color-brand-100: #f3e8ff;
+  --color-brand-200: #e9d5ff;
+  --color-brand-300: #d8b4fe;
+  --color-brand-400: #c084fc;
+  --color-brand-500: #a855f7;
+  --color-brand-600: #9333ea;
+  --color-brand-700: #7e22ce;
+  --color-brand-800: #6b21a8;
+  --color-brand-900: #581c87;
+  --color-brand-950: #3b0764;
+
+  /* Semânticos — seguem o tema via as custom props acima */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border-c: var(--border-c);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--text-c);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Base                                                             *
+ * ------------------------------------------------------------------ */
 @layer base {
+  * {
+    border-color: var(--border-c);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
   body {
-    @apply bg-white text-slate-900 antialiased;
+    margin: 0;
+    background-color: var(--bg);
+    color: var(--text-c);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  :is(.dark body) {
-    @apply bg-slate-950 text-slate-100;
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    color: var(--text-c);
+  }
+
+  /* Números alinhados em tabelas, métricas e horários */
+  .tabular,
+  time,
+  .stat-value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--color-brand-600);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
   }
 }
 
-/* 4. Estilos remanescentes do layout base (versão simplificada da main) */
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-  padding: 32px 20px;
+/* ------------------------------------------------------------------ *
+ *  Componentes                                                      *
+ * ------------------------------------------------------------------ */
+@layer components {
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border-c);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xs);
+  }
+
+  .card-hover {
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .card-hover:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-lg);
+    padding: 0.5rem 0.875rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--color-brand-600);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-brand-700);
+  }
+
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--surface-2);
+    color: var(--text-c);
+  }
+
+  .btn-outline {
+    background-color: var(--surface);
+    border: 1px solid var(--border-c);
+    color: var(--text-c);
+  }
+  .btn-outline:hover:not(:disabled) {
+    background-color: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  .btn-danger {
+    background-color: transparent;
+    color: #dc2626;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background-color: #fef2f2;
+  }
+  .dark .btn-danger:hover:not(:disabled) {
+    background-color: rgb(220 38 38 / 0.12);
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+    cursor: pointer;
+  }
+  .icon-btn:hover {
+    background-color: var(--surface-2);
+    color: var(--text-c);
+  }
+
+  .input,
+  .select {
+    width: 100%;
+    background-color: var(--surface);
+    border: 1px solid var(--border-c);
+    border-radius: var(--radius-lg);
+    padding: 0.5rem 0.75rem;
+    color: var(--text-c);
+    font-size: 0.875rem;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .input::placeholder {
+    color: var(--text-subtle);
+  }
+  .input:focus,
+  .select:focus {
+    outline: none;
+    border-color: var(--color-brand-500);
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 0.375rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    white-space: nowrap;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-c);
+  }
+
+  .page-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.125rem;
+  }
 }
 
-.hero {
-  width: 170px;
+@layer utilities {
+  .text-muted {
+    color: var(--text-muted);
+  }
+  .text-subtle {
+    color: var(--text-subtle);
+  }
 }
