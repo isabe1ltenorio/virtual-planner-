@@ -1,17 +1,20 @@
 /**
  * Identidade visual do Taskly, num lugar só.
  *
- * Para trocar por uma logo sua:
- *  - marca (quadradinho): substitua o arquivo  front-end/public/logo.svg
- *  - lockup inteiro (marca + nome): use <Brand wordmark={false} /> e coloque
- *    a arte completa em public/logo.svg (pode ser .svg ou .png; ajuste o src)
+ * TROCAR PELA SUA LOGO:
+ *  - Logo COMPLETA (símbolo + nome "Taskly" na mesma arte):
+ *      substitua  front-end/public/logo.svg  pela sua.
+ *      Se for PNG, salve como public/logo.png e troque o src abaixo.
+ *      Deixe `wordmark` como está (false) — o nome já vem na imagem.
+ *  - Só o SÍMBOLO (sem o nome):
+ *      substitua public/logo.svg pelo seu símbolo e use <Brand wordmark />
+ *      (aí o texto "Taskly" é desenhado ao lado, na fonte Gilroy).
  *
- * `size` controla a altura da marca em px. O nome "Taskly" é texto HTML
- * (fonte Gilroy), então fica nítido em qualquer tela.
+ * `size` = altura da logo em px; a largura se ajusta sozinha.
  */
 export function Brand({
-  size = 32,
-  wordmark = true,
+  size = 30,
+  wordmark = false,
   className = "",
 }: {
   size?: number;
@@ -23,14 +26,12 @@ export function Brand({
       <img
         src="/logo.svg"
         alt="Taskly"
-        width={size}
-        height={size}
         style={{ height: size, width: "auto" }}
       />
       {wordmark && (
         <span
           className="font-bold tracking-tight text-ink"
-          style={{ fontSize: size * 0.6 }}
+          style={{ fontSize: size * 0.62 }}
         >
           Taskly
         </span>

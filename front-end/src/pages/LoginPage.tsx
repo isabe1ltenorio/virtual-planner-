@@ -64,7 +64,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-bg p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6">
-          <Brand size={34} />
+          <Brand size={38} />
         </div>
 
         <form onSubmit={handleSubmit} className="card space-y-4 p-6">
