@@ -100,6 +100,7 @@ export function TaskFormPage() {
       timeMode === "shift"
         ? {
             ...form,
+            shift: form.shift ?? "Morning",
             startMinutes: undefined,
             endMinutes: undefined,
           }

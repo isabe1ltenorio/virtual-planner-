@@ -1,5 +1,5 @@
 import type { Task, Goal, Category } from "../types/domain";
-import { CATEGORY_LABELS, formatDateShort } from "../lib/formatters";
+import { CATEGORY_LABELS, SHIFT_LABELS, formatDateShort } from "../lib/formatters";
 
 export interface ReportStats {
   // percentage = (executadas + parciais·0,5) / total — mesma fórmula do
@@ -44,10 +44,12 @@ export function calculateReportStats(
     return CATEGORY_LABELS[top];
   };
 
-  // Turno mais produtivo baseado nos minutos
-  const shiftCounts = { Manhã: 0, Tarde: 0, Noite: 0 };
+  // Turno explícito ou derivado do horário inicial.
+  const shiftCounts: Record<string, number> = { Manhã: 0, Tarde: 0, Noite: 0 };
   completedTasks.forEach((t) => {
-    if (t.startMinutes !== undefined) {
+    if (t.shift) {
+      shiftCounts[SHIFT_LABELS[t.shift]]++;
+    } else if (t.startMinutes !== undefined) {
       if (t.startMinutes < 720) shiftCounts["Manhã"]++;
       else if (t.startMinutes < 1080) shiftCounts["Tarde"]++;
       else shiftCounts["Noite"]++;

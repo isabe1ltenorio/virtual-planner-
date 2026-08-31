@@ -20,6 +20,7 @@ const SHIFT_WINDOW: Record<Shift, { start: number; end: number }> = {
 interface DayTimelineProps {
   tasks: Task[]; // já filtradas para o dia
   onStatusChange: (id: number, status: Task["status"]) => void;
+  updatingTaskIds?: ReadonlySet<number>;
   /** Clique numa faixa vazia da timeline → minuto arredondado a 15. */
   onEmptyClick?: (minutes: number) => void;
 }
@@ -50,6 +51,7 @@ function assignLanes(tasks: Task[]) {
 export function DayTimeline({
   tasks,
   onStatusChange,
+  updatingTaskIds,
   onEmptyClick,
 }: DayTimelineProps) {
   const timed = useMemo(
@@ -187,6 +189,7 @@ export function DayTimeline({
                     <div className="mt-1">
                       <StatusMenu
                         value={task.status}
+                        disabled={updatingTaskIds?.has(task.id)}
                         onChange={(next) => onStatusChange(task.id, next)}
                       />
                     </div>
@@ -199,38 +202,46 @@ export function DayTimeline({
           {/* Coluna de turnos: cada tarefa por turno ocupa a janela do turno,
               numa faixa própria à direita — nunca colide com os blocos. */}
           {shiftTasks.length > 0 && (
-            <div className="relative w-28 shrink-0" style={{ height }}>
-              {shiftTasks.map((task, i) => {
-                const w = SHIFT_WINDOW[task.shift as Shift];
-                const color = CATEGORY_COLORS[task.category];
+            <div className="relative w-44 shrink-0" style={{ height }}>
+              {(Object.keys(SHIFT_WINDOW) as Shift[]).map((shift) => {
+                const group = shiftTasks.filter((task) => task.shift === shift);
+                if (group.length === 0) return null;
+                const w = SHIFT_WINDOW[shift];
                 return (
                   <div
-                    key={task.id}
-                    className="absolute overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-[11px]"
+                    key={shift}
+                    className="absolute overflow-y-auto rounded-md border border-dashed border-border-c bg-surface px-1.5 py-1 text-[11px]"
                     style={{
                       top: (w.start - start) * PX_PER_MIN,
                       height: (w.end - w.start) * PX_PER_MIN - 3,
-                      left: i * 6,
+                      left: 0,
                       right: 0,
-                      borderColor: color,
-                      background: `color-mix(in srgb, ${color} 10%, var(--surface))`,
                     }}
                   >
                     <span className="mb-0.5 block font-medium text-subtle">
-                      {SHIFT_LABELS[task.shift as Shift]}
+                      {SHIFT_LABELS[shift]}
                     </span>
-                    <Link
-                      to={`/tasks/${task.id}/edit`}
-                      className="block truncate font-medium text-ink hover:underline"
-                    >
-                      {task.description}
-                    </Link>
-                    <div className="mt-1">
-                      <StatusMenu
-                        value={task.status}
-                        onChange={(next) => onStatusChange(task.id, next)}
-                      />
-                    </div>
+                    {group.map((task) => (
+                      <div
+                        key={task.id}
+                        className="border-l-2 pl-1 py-2"
+                        style={{ borderColor: CATEGORY_COLORS[task.category] }}
+                      >
+                        <Link
+                          to={`/tasks/${task.id}/edit`}
+                          className="block truncate font-medium text-ink hover:underline"
+                        >
+                          {task.description}
+                        </Link>
+                        <div className="mt-1">
+                          <StatusMenu
+                            value={task.status}
+                            disabled={updatingTaskIds?.has(task.id)}
+                            onChange={(next) => onStatusChange(task.id, next)}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 );
               })}
@@ -260,6 +271,7 @@ export function DayTimeline({
                 </div>
                 <StatusMenu
                   value={task.status}
+                  disabled={updatingTaskIds?.has(task.id)}
                   onChange={(next) => onStatusChange(task.id, next)}
                 />
               </li>

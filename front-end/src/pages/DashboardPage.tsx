@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { startOfMonth, startOfWeek } from "date-fns";
 import {
   Area,
   AreaChart,
@@ -60,6 +61,9 @@ export function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [occurrences, setOccurrences] = useState<ReminderOccurrence[]>([]);
+  const [calendarOccurrences, setCalendarOccurrences] = useState<ReminderOccurrence[]>([]);
+  const [calendarMonth, setCalendarMonth] = useState(() => formatDateForInput().slice(0, 7));
+  const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<number>>(() => new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(formatDateForInput());
   const [range, setRange] = useState<RangeDays>(14);
@@ -85,8 +89,32 @@ export function DashboardPage() {
     })();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const start = startOfWeek(startOfMonth(new Date(`${calendarMonth}-01T00:00:00`)));
+    const startDate = formatDateForInput(start);
+    const endDate = formatDateForInput(addDays(start, 41));
+    const requests = [virtualPlannerApi.getReminderOccurrences({
+      start: startDate,
+      end: endDate,
+    })];
+    // Navegar pelo calendário não troca o dia selecionado na agenda.
+    if (selectedDate < startDate || selectedDate > endDate) {
+      requests.push(virtualPlannerApi.getReminderOccurrences({
+        start: selectedDate,
+        end: selectedDate,
+      }));
+    }
+    Promise.all(requests).then((items) => {
+      if (!cancelled) setCalendarOccurrences(items.flat());
+    }).catch((error) => console.error("lembretes do calendário:", error));
+    return () => { cancelled = true; };
+  }, [calendarMonth, selectedDate]);
+
   async function handleStatus(id: number, next: TaskStatus) {
-    const previous = tasks;
+    if (updatingTaskIds.has(id)) return;
+    const previous = tasks.find((task) => task.id === id)?.status;
+    setUpdatingTaskIds((prev) => new Set(prev).add(id));
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: next } : t)),
     );
@@ -94,7 +122,15 @@ export function DashboardPage() {
       await virtualPlannerApi.updateTask(id, { status: next });
     } catch (error) {
       console.error("Erro ao mudar status:", error);
-      setTasks(previous);
+      setTasks((prev) => prev.map((task) =>
+        task.id === id && previous !== undefined ? { ...task, status: previous } : task,
+      ));
+    } finally {
+      setUpdatingTaskIds((prev) => {
+        const pending = new Set(prev);
+        pending.delete(id);
+        return pending;
+      });
     }
   }
 
@@ -112,8 +148,8 @@ export function DashboardPage() {
     [tasks, selectedDate],
   );
   const dayReminders = useMemo(
-    () => occurrences.filter((o) => o.date === selectedDate),
-    [occurrences, selectedDate],
+    () => calendarOccurrences.filter((o) => o.date === selectedDate),
+    [calendarOccurrences, selectedDate],
   );
 
   const inProgressGoals = goals.filter((g) => g.status === "In Progress");
@@ -147,8 +183,9 @@ export function DashboardPage() {
     const set = new Set<string>();
     tasks.forEach((t) => set.add(t.date));
     occurrences.forEach((o) => set.add(o.date));
+    calendarOccurrences.forEach((o) => set.add(o.date));
     return set;
-  }, [tasks, occurrences]);
+  }, [tasks, occurrences, calendarOccurrences]);
 
   const statusData = useMemo(
     () =>
@@ -332,6 +369,7 @@ export function DashboardPage() {
                 </div>
                 <StatusMenu
                   value={task.status}
+                  disabled={updatingTaskIds.has(task.id)}
                   onChange={(next) => handleStatus(task.id, next)}
                 />
               </li>
@@ -506,6 +544,7 @@ export function DashboardPage() {
             </div>
             <DayTimeline
               tasks={dayTasks}
+              updatingTaskIds={updatingTaskIds}
               onStatusChange={handleStatus}
               onEmptyClick={(minutes) =>
                 navigate(`/tasks/new?date=${selectedDate}&start=${minutes}`)
@@ -553,6 +592,7 @@ export function DashboardPage() {
             <MiniCalendar
               value={selectedDate}
               onChange={setSelectedDate}
+              onMonthChange={setCalendarMonth}
               marked={marked}
             />
           </Card>

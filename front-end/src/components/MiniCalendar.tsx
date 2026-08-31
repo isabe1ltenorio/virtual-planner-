@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   addDays,
   addMonths,
-  endOfMonth,
   isSameDay,
   isSameMonth,
   isToday,
@@ -16,6 +15,7 @@ interface MiniCalendarProps {
   /** Dia selecionado, YYYY-MM-DD. */
   value: string;
   onChange: (date: string) => void;
+  onMonthChange?: (month: string) => void;
   /** Dias (YYYY-MM-DD) que têm tarefa ou lembrete — ganham um ponto. */
   marked?: Set<string>;
 }
@@ -26,14 +26,18 @@ const MONTHS = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-export function MiniCalendar({ value, onChange, marked }: MiniCalendarProps) {
+export function MiniCalendar({ value, onChange, onMonthChange, marked }: MiniCalendarProps) {
   const selected = new Date(`${value}T00:00:00`);
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(selected));
 
   const gridStart = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
-  const lastVisible = days[41];
-  const rows = endOfMonth(viewMonth) > lastVisible ? 42 : 35;
+  const rows = isSameMonth(days[35], viewMonth) ? 42 : 35;
+
+  function changeMonth(month: Date) {
+    setViewMonth(startOfMonth(month));
+    onMonthChange?.(formatDateForInput(month).slice(0, 7));
+  }
 
   return (
     <div>
@@ -47,7 +51,7 @@ export function MiniCalendar({ value, onChange, marked }: MiniCalendarProps) {
             className="mr-1 rounded-md px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
             onClick={() => {
               const now = new Date();
-              setViewMonth(startOfMonth(now));
+              changeMonth(now);
               onChange(formatDateForInput(now));
             }}
           >
@@ -57,7 +61,7 @@ export function MiniCalendar({ value, onChange, marked }: MiniCalendarProps) {
             type="button"
             aria-label="Mês anterior"
             className="icon-btn"
-            onClick={() => setViewMonth((m) => addMonths(m, -1))}
+            onClick={() => changeMonth(addMonths(viewMonth, -1))}
           >
             <ChevronLeft size={16} />
           </button>
@@ -65,7 +69,7 @@ export function MiniCalendar({ value, onChange, marked }: MiniCalendarProps) {
             type="button"
             aria-label="Próximo mês"
             className="icon-btn"
-            onClick={() => setViewMonth((m) => addMonths(m, 1))}
+            onClick={() => changeMonth(addMonths(viewMonth, 1))}
           >
             <ChevronRight size={16} />
           </button>
