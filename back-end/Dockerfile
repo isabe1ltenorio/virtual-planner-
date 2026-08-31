@@ -41,12 +41,17 @@ RUN git clone --depth 1 --branch "${LIBPQXX_VERSION}" \
 WORKDIR /src
 COPY back-end/ back-end/
 
+# A imagem só precisa do binário do app. Buildar tudo (`cmake --build build`)
+# compila também as ~40 binárias de teste, e em máquina pequena (Codespace de
+# 2 núcleos) o paralelismo nos TUs pesados de httplib estoura a RAM e o cc1plus
+# é morto ("Terminated signal terminated program cc1plus"). --target virtual_planner
+# compila só o necessário; --parallel 2 dá a folga de memória.
 RUN cmake -S back-end -B build \
       -DCMAKE_BUILD_TYPE=Release \
       -DVIRTUAL_PLANNER_WITH_HTTP=ON \
       -DVIRTUAL_PLANNER_WITH_POSTGRES=ON \
       -DCMAKE_PREFIX_PATH=/opt/libpqxx \
- && cmake --build build --parallel
+ && cmake --build build --target virtual_planner --parallel 2
 
 # --------------------------------------------------------------------------
 # Estagio de runtime
