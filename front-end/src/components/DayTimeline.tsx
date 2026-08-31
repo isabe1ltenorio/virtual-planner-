@@ -12,6 +12,8 @@ import { StatusMenu } from "./StatusMenu";
 interface DayTimelineProps {
   tasks: Task[]; // já filtradas para o dia
   onStatusChange: (id: number, status: Task["status"]) => void;
+  /** Clique numa faixa vazia da timeline → minuto arredondado a 15. */
+  onEmptyClick?: (minutes: number) => void;
 }
 
 const PX_PER_MIN = 0.55; // 1h ≈ 33px — compacto; o container rola se passar
@@ -37,7 +39,11 @@ function assignLanes(tasks: Task[]) {
   return { placed, lanes: Math.max(laneEnds.length, 1) };
 }
 
-export function DayTimeline({ tasks, onStatusChange }: DayTimelineProps) {
+export function DayTimeline({
+  tasks,
+  onStatusChange,
+  onEmptyClick,
+}: DayTimelineProps) {
   const timed = useMemo(
     () => tasks.filter((t) => t.startMinutes != null),
     [tasks],
@@ -90,8 +96,16 @@ export function DayTimeline({ tasks, onStatusChange }: DayTimelineProps) {
 
           {/* Faixa de blocos */}
           <div
-            className="relative flex-1 border-l border-border-c"
+            className={`relative flex-1 border-l border-border-c ${
+              onEmptyClick ? "cursor-copy" : ""
+            }`}
             style={{ height }}
+            onClick={(e) => {
+              if (!onEmptyClick || e.target !== e.currentTarget) return;
+              const y = e.nativeEvent.offsetY;
+              const raw = start + y / PX_PER_MIN;
+              onEmptyClick(Math.round(raw / 15) * 15);
+            }}
           >
             {hours.map((m) => (
               <div

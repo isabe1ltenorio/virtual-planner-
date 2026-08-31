@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   Area,
   AreaChart,
@@ -15,7 +15,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CheckCircle2, Clock, Target, Bell, Plus } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  Target,
+  Bell,
+  Plus,
+  AlertTriangle,
+} from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
 import type { ReminderOccurrence } from "../lib/api/remindersApi";
 import type { Category, Task, Goal, TaskStatus } from "../types/domain";
@@ -32,6 +39,7 @@ import {
 import { Card, LoadingState, PageHeader, StatCard } from "../components/ui";
 import { MiniCalendar } from "../components/MiniCalendar";
 import { DayTimeline } from "../components/DayTimeline";
+import { StatusMenu } from "../components/StatusMenu";
 import { buttonClass } from "../components/buttonStyles";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
@@ -56,6 +64,7 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(formatDateForInput());
   const [range, setRange] = useState<RangeDays>(14);
 
+  const navigate = useNavigate();
   const today = formatDateForInput();
 
   useEffect(() => {
@@ -118,6 +127,19 @@ export function DashboardPage() {
     dayTasks.length > 0
       ? Math.round(((executed + partial * 0.5) / dayTasks.length) * 100)
       : 0;
+
+  // Pendentes/adiadas de dias passados: some do "hoje" mas continuam devendo.
+  const overdue = useMemo(
+    () =>
+      tasks
+        .filter(
+          (t) =>
+            t.date < today &&
+            (t.status === "Pending" || t.status === "Postponed"),
+        )
+        .sort((a, b) => (a.date < b.date ? -1 : 1)),
+    [tasks, today],
+  );
 
   const marked = useMemo(() => {
     const set = new Set<string>();
@@ -252,6 +274,50 @@ export function DashboardPage() {
           icon={<Bell size={16} />}
         />
       </div>
+
+      {overdue.length > 0 && (
+        <Card className="border-amber-300 p-5 dark:border-amber-500/40">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-500" />
+            <h2 className="text-sm font-semibold text-ink">
+              Atrasadas ({overdue.length})
+            </h2>
+          </div>
+          <ul className="divide-y divide-border-c">
+            {overdue.slice(0, 6).map((task) => (
+              <li
+                key={task.id}
+                className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+              >
+                <span
+                  className="h-8 w-1 shrink-0 rounded-full"
+                  style={{ background: CATEGORY_COLORS[task.category] }}
+                />
+                <div className="min-w-0 flex-1">
+                  <Link
+                    to={`/tasks/${task.id}/edit`}
+                    className="block truncate text-sm font-medium text-ink hover:underline"
+                  >
+                    {task.description}
+                  </Link>
+                  <p className="text-xs text-muted">
+                    {formatDateShort(task.date)} · {CATEGORY_LABELS[task.category]}
+                  </p>
+                </div>
+                <StatusMenu
+                  value={task.status}
+                  onChange={(next) => handleStatus(task.id, next)}
+                />
+              </li>
+            ))}
+          </ul>
+          {overdue.length > 6 && (
+            <p className="mt-2 text-xs text-subtle">
+              e mais {overdue.length - 6}…
+            </p>
+          )}
+        </Card>
+      )}
 
       <Card className="p-5">
         <div className="mb-2 flex items-center justify-between">
@@ -401,10 +467,24 @@ export function DashboardPage() {
         {/* Agenda do dia */}
         <div className="lg:col-span-2">
           <Card className="p-5">
-            <h2 className="mb-4 text-sm font-semibold text-ink">
-              Agenda de {dayLabel}
-            </h2>
-            <DayTimeline tasks={dayTasks} onStatusChange={handleStatus} />
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">
+                Agenda de {dayLabel}
+              </h2>
+              <Link
+                to={`/tasks/new?date=${selectedDate}`}
+                className="text-xs font-medium text-brand-600 hover:underline"
+              >
+                + agendar
+              </Link>
+            </div>
+            <DayTimeline
+              tasks={dayTasks}
+              onStatusChange={handleStatus}
+              onEmptyClick={(minutes) =>
+                navigate(`/tasks/new?date=${selectedDate}&start=${minutes}`)
+              }
+            />
 
             {dayReminders.length > 0 && (
               <div className="mt-4 border-t border-border-c pt-3">
