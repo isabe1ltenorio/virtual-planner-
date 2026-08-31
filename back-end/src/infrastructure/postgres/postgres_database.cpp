@@ -38,6 +38,26 @@ namespace virtual_planner::infrastructure::postgres
 
   const PostgresConfig &PostgresDatabase::config() const noexcept { return config_; }
 
+  bool PostgresDatabase::is_connected() const noexcept
+  {
+    if (!Database::is_connected() || connection_ == nullptr || !connection_->is_open())
+    {
+      return false;
+    }
+
+    // O estado do ciclo de vida nao detecta uma queda posterior do servidor.
+    // O health check verifica a conexao real, no mesmo atendimento serial da API.
+    try
+    {
+      pqxx::nontransaction probe(*connection_);
+      return probe.exec("SELECT 1").one_row()[0].as<int>() == 1;
+    }
+    catch (const std::exception&)
+    {
+      return false;
+    }
+  }
+
   void PostgresDatabase::on_initialize()
   {
     config_.validate();

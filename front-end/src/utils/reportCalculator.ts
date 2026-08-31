@@ -1,11 +1,25 @@
 import type { Task, Goal, Category } from "../types/domain";
-import { CATEGORY_LABELS, SHIFT_LABELS, formatDateShort } from "../lib/formatters";
+import {
+  CATEGORY_LABELS,
+  SHIFT_LABELS,
+  formatDateShort,
+} from "../lib/formatters";
 
 export interface ReportStats {
   // percentage = (executadas + parciais·0,5) / total — mesma fórmula do
   // Dashboard e do relatório do backend.
-  tasks: { total: number; executed: number; partial: number; percentage: number };
-  goals: { total: number; completed: number; partial: number; percentage: number };
+  tasks: {
+    total: number;
+    executed: number;
+    partial: number;
+    percentage: number;
+  };
+  goals: {
+    total: number;
+    completed: number;
+    partial: number;
+    percentage: number;
+  };
   topTaskCategory: string;
   topGoalCategory: string;
   bestShift: string;
@@ -76,7 +90,10 @@ export function calculateReportStats(
       total: tasks.length,
       executed: executedTasks.length,
       partial: partialTasks.length,
-      percentage: pct(executedTasks.length + partialTasks.length * 0.5, tasks.length),
+      percentage: pct(
+        executedTasks.length + partialTasks.length * 0.5,
+        tasks.length,
+      ),
     },
     goals: {
       total: goals.length,

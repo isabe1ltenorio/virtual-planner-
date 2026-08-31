@@ -1,6 +1,9 @@
 import * as goalsApi from "./goalsApi";
 import * as tasksApi from "./tasksApi";
 import * as remindersApi from "./remindersApi";
+import * as profileApi from "./profileApi";
+import * as healthApi from "./healthApi";
+import * as reportingApi from "./reportingApi";
 
 // Fachada única das telas. Meta, Tarefa e Lembrete falam com o backend real
 // (endpoints em goalsApi / tasksApi / remindersApi). A escolha fica aqui, e
@@ -28,4 +31,10 @@ export const virtualPlannerApi = {
   createReminder: remindersApi.createReminder,
   updateReminder: remindersApi.updateReminder,
   deleteReminder: remindersApi.deleteReminder,
+  getProfile: profileApi.getProfile,
+  updateProfile: profileApi.updateProfile,
+  getHealth: healthApi.getHealth,
+  getDashboard: reportingApi.getDashboard,
+  getReport: reportingApi.getReport,
+  getTaskConflicts: tasksApi.getTaskConflicts,
 };

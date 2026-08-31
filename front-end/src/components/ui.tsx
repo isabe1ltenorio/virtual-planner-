@@ -1,6 +1,10 @@
 import {
   useState,
+  useEffect,
+  useId,
+  useRef,
   type ButtonHTMLAttributes,
+  type SelectHTMLAttributes,
   type ReactNode,
 } from "react";
 import { buttonClass, type ButtonVariant } from "./buttonStyles";
@@ -65,9 +69,8 @@ export function Badge({
   if (color) {
     return (
       <span
-        className={`badge ${className}`}
+        className={`badge text-ink ${className}`}
         style={{
-          color,
           backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
         }}
       >
@@ -80,9 +83,7 @@ export function Badge({
     );
   }
   return (
-    <span
-      className={`badge bg-surface-2 text-muted ${className}`}
-    >
+    <span className={`badge bg-surface-2 text-muted ${className}`}>
       {children}
     </span>
   );
@@ -191,10 +192,124 @@ export function EmptyState({
 
 export function LoadingState({ label = "Carregando…" }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-muted">
+    <div
+      role="status"
+      className="flex items-center justify-center gap-3 px-6 py-16 text-sm text-muted"
+    >
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
       {label}
     </div>
+  );
+}
+
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+    >
+      <p>{message}</p>
+      {onRetry && (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-3"
+          onClick={onRetry}
+        >
+          Tentar novamente
+        </Button>
+      )}
+    </div>
+  );
+}
+
+export function Select({
+  className = "",
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={`select ${className}`} {...props} />;
+}
+
+export function Table({
+  caption,
+  headings,
+  children,
+}: {
+  caption: string;
+  headings: string[];
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr>
+            {headings.map((heading) => (
+              <th
+                key={heading}
+                scope="col"
+                className="border-b border-border-c px-3 py-2 font-medium text-muted"
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border-c">{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+export function Modal({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    if (open && !dialog.current?.open) dialog.current?.showModal();
+    if (!open && dialog.current?.open) dialog.current.close();
+  }, [open]);
+  return (
+    <dialog
+      ref={dialog}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      className="fixed inset-0 m-auto w-[calc(100%_-_2rem)] max-w-md rounded-xl border border-border-c bg-surface p-6 text-ink shadow-xl backdrop:bg-black/50"
+    >
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 id={titleId} className="font-semibold">
+          {title}
+        </h2>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onClose}
+          aria-label="Fechar"
+        >
+          ×
+        </Button>
+      </div>
+      {children}
+    </dialog>
   );
 }
 
@@ -236,46 +351,47 @@ export function DangerConfirm({
   label = "Excluir",
   confirmLabel = "Confirmar exclusão",
   icon,
+  disabled = false,
+  description = "Essa ação não pode ser desfeita.",
 }: {
   onConfirm: () => void;
   label?: string;
   confirmLabel?: string;
   icon?: ReactNode;
+  disabled?: boolean;
+  description?: string;
 }) {
   const [armed, setArmed] = useState(false);
-
-  if (armed) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <button
-          type="button"
-          className="btn btn-danger"
-          onClick={() => {
-            setArmed(false);
-            onConfirm();
-          }}
-        >
-          {confirmLabel}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => setArmed(false)}
-        >
-          Cancelar
-        </button>
-      </span>
-    );
-  }
-
   return (
-    <button
-      type="button"
-      className="btn btn-ghost text-muted"
-      onClick={() => setArmed(true)}
-    >
-      {icon}
-      {label}
-    </button>
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={disabled}
+        onClick={() => setArmed(true)}
+      >
+        {icon}
+        {label}
+      </Button>
+      <Modal open={armed} title={confirmLabel} onClose={() => setArmed(false)}>
+        <p className="text-sm text-muted">{description}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => setArmed(false)}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            disabled={disabled}
+            onClick={() => {
+              setArmed(false);
+              onConfirm();
+            }}
+          >
+            {confirmLabel}
+          </Button>
+        </div>
+      </Modal>
+    </>
   );
 }

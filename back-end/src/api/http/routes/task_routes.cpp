@@ -8,6 +8,7 @@
 #include "virtual_planner/application/task/delete_task_use_case.hpp"
 #include "virtual_planner/application/task/get_task_use_case.hpp"
 #include "virtual_planner/application/task/list_tasks_use_case.hpp"
+#include "virtual_planner/application/task/task_conflict_service.hpp"
 #include "virtual_planner/application/task/update_task_use_case.hpp"
 
 #include <cstddef>
@@ -273,6 +274,27 @@ void register_task_routes(ApiServer& api)
             }
 
             response.set_content(body.dump(), "application/json");
+        });
+
+    api.server().Get(
+        "/api/tasks/conflicts",
+        [&api, tasks](const httplib::Request& request,
+                      httplib::Response& response) {
+            if (!request.has_param("date"))
+            {
+                throw std::invalid_argument("Missing required query parameter: date.");
+            }
+
+            const auto date = json::date_from_json(request.get_param_value("date"));
+            application::TaskConflictService service{*tasks};
+            nlohmann::json conflicts = nlohmann::json::array();
+            for (const auto& conflict : service.conflicts_on(date, caller_id(api, request)))
+            {
+                conflicts.push_back({{"first_task_id", conflict.first.id()},
+                                     {"second_task_id", conflict.second.id()}});
+            }
+            response.set_content(nlohmann::json{{"conflicts", conflicts}}.dump(),
+                                 "application/json");
         });
 
     // GET /api/tasks/:id

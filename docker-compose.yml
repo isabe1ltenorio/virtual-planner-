@@ -12,9 +12,9 @@
 # raiz o compose para com erro, em vez de subir com uma senha publicada neste
 # repositorio.
 #
-# Todas as portas sao publicadas apenas em 127.0.0.1. A API nao tem
-# autenticacao: qualquer pessoa que a alcance le, altera e apaga dados. Nao
-# troque para 0.0.0.0 antes de existir autenticacao.
+# Todas as portas sao publicadas apenas em 127.0.0.1. A API usa sessao, mas
+# esta stack HTTP e para uso local. Publicacao exige HTTPS e configuracao
+# de producao; nao exponha estas portas diretamente.
 
 services:
   postgres:
@@ -87,9 +87,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env da raiz}
       POSTGRES_SSLMODE: disable
     ports:
-      # A API nao tem autenticacao. Enquanto nao tiver, publicar fora do
-      # loopback entrega CRUD e relatorios a qualquer host que alcance esta
-      # maquina.
+      # Loopback preserva o limite local da stack de desenvolvimento.
       - "127.0.0.1:8080:8080"
     healthcheck:
       # /api/health responde 200 mesmo com o banco fora do ar, por isso o

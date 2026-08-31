@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router";
 import { Plus, Pencil, Bell } from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
-import type { Reminder, ReminderType } from "../types/domain";
+import type { ReminderRecurrence, ReminderType } from "../types/domain";
 import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
   REMINDER_TYPE_LABELS,
   REMINDER_RECURRENCE_LABELS,
   formatDateShort,
+  formatDateForInput,
   formatMinutesToTime,
 } from "../lib/formatters";
 import {
@@ -16,37 +17,57 @@ import {
   Card,
   DangerConfirm,
   EmptyState,
+  ErrorState,
   Field,
   LoadingState,
   PageHeader,
 } from "../components/ui";
+import { useApiResource } from "../hooks/useApiResource";
+import { addDays } from "date-fns";
 import { buttonClass } from "../components/buttonStyles";
 
 export function RemindersPage() {
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [type, setType] = useState<"ALL" | ReminderType>("ALL");
-
-  useEffect(() => {
-    virtualPlannerApi
-      .getReminders()
-      .then(setReminders)
-      .catch((e) => console.error("Erro ao buscar lembretes:", e))
-      .finally(() => setIsLoading(false));
-  }, []);
-
+  const [recurrence, setRecurrence] = useState<"ALL" | ReminderRecurrence>(
+    "ALL",
+  );
+  const [startDate, setStartDate] = useState(formatDateForInput());
+  const [endDate, setEndDate] = useState(() =>
+    formatDateForInput(addDays(new Date(), 30)),
+  );
+  const [deletingId, setDeletingId] = useState<number>();
+  const [mutationError, setMutationError] = useState<string>();
+  const load = useCallback(
+    () =>
+      virtualPlannerApi.getReminderOccurrences({
+        start: startDate,
+        end: endDate,
+      }),
+    [startDate, endDate],
+  );
+  const resource = useApiResource(load);
+  const filtered = (resource.data ?? []).filter(
+    ({ reminder }) =>
+      (type === "ALL" || reminder.type === type) &&
+      (recurrence === "ALL" || reminder.recurrence === recurrence),
+  );
   async function handleDelete(id: number) {
+    if (deletingId !== undefined) return;
+    setDeletingId(id);
+    setMutationError(undefined);
     try {
       await virtualPlannerApi.deleteReminder(id);
-      setReminders((prev) => prev.filter((r) => r.id !== id));
+      resource.retry();
     } catch (error) {
-      console.error("Erro ao excluir lembrete:", error);
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o lembrete.",
+      );
+    } finally {
+      setDeletingId(undefined);
     }
   }
-
-  const filtered = reminders.filter(
-    (r) => type === "ALL" || r.type === type,
-  );
 
   return (
     <>
@@ -61,7 +82,7 @@ export function RemindersPage() {
         }
       />
 
-      <Card className="p-4 sm:max-w-xs">
+      <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
         <Field label="Tipo">
           <select
             className="select"
@@ -76,10 +97,48 @@ export function RemindersPage() {
             ))}
           </select>
         </Field>
+        <Field label="Recorrência">
+          <select
+            className="select"
+            value={recurrence}
+            onChange={(e) => setRecurrence(e.target.value as typeof recurrence)}
+          >
+            <option value="ALL">Todas</option>
+            {(
+              Object.keys(REMINDER_RECURRENCE_LABELS) as ReminderRecurrence[]
+            ).map((value) => (
+              <option key={value} value={value}>
+                {REMINDER_RECURRENCE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Data inicial">
+          <input
+            type="date"
+            className="input"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Data final">
+          <input
+            type="date"
+            className="input"
+            min={startDate}
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            required
+          />
+        </Field>
       </Card>
 
-      {isLoading ? (
+      {mutationError && <ErrorState message={mutationError} />}
+      {resource.isLoading ? (
         <LoadingState label="Carregando lembretes…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Bell size={28} strokeWidth={1.5} />}
@@ -94,9 +153,9 @@ export function RemindersPage() {
         />
       ) : (
         <Card className="divide-y divide-border-c overflow-hidden">
-          {filtered.map((reminder) => (
+          {filtered.map(({ reminder, date }) => (
             <div
-              key={reminder.id}
+              key={`${reminder.id}-${date}`}
               className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
@@ -104,7 +163,7 @@ export function RemindersPage() {
                   {reminder.description}
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {formatDateShort(reminder.date)} ·{" "}
+                  {formatDateShort(date)} ·{" "}
                   {formatMinutesToTime(reminder.startMinutes)} ·{" "}
                   {REMINDER_RECURRENCE_LABELS[reminder.recurrence]}
                 </p>
@@ -121,7 +180,11 @@ export function RemindersPage() {
                   <Pencil size={14} />
                   Editar
                 </Link>
-                <DangerConfirm onConfirm={() => handleDelete(reminder.id)} />
+                <DangerConfirm
+                  disabled={deletingId !== undefined}
+                  description="Isso exclui o lembrete e todas as suas ocorrências."
+                  onConfirm={() => handleDelete(reminder.id)}
+                />
               </div>
             </div>
           ))}

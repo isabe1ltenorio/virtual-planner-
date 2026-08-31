@@ -1,8 +1,4 @@
 // Endpoints reais de `Goal`.
-//
-// É a única entidade com backend hoje. `Task` e `Reminder` continuam em mock,
-// atrás da mesma interface de `virtualPlannerApi`, então as telas não sabem a
-// diferença.
 
 import type { Goal } from "../../types/domain";
 import { formatDateForInput } from "../formatters";
@@ -27,7 +23,9 @@ const defaultWindow: GoalWindow = {
   date: formatDateForInput(),
 };
 
-export async function listGoals(window: GoalWindow = defaultWindow): Promise<Goal[]> {
+export async function listGoals(
+  window: GoalWindow = defaultWindow,
+): Promise<Goal[]> {
   return request<Goal[]>("/goals", {
     query: { period: window.period, date: window.date },
   });

@@ -104,7 +104,7 @@ int main()
     {
         credentialed.save(collides);
     }
-    catch (const std::invalid_argument&)
+    catch (const shared::ConflictError&)
     {
         rejected = true;
     }

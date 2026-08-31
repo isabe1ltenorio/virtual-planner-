@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router";
 import { Plus, Pencil, Target } from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
-import type { Goal, GoalPeriod, GoalStatus } from "../types/domain";
+import type { GoalStatus } from "../types/domain";
 import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
   GOAL_PERIOD_LABELS,
+  formatDateForInput,
   GOAL_STATUS_LABELS,
   GOAL_STATUS_COLORS,
   formatDateShort,
@@ -16,40 +17,47 @@ import {
   Card,
   DangerConfirm,
   EmptyState,
+  ErrorState,
   Field,
   LoadingState,
   PageHeader,
 } from "../components/ui";
+import { useApiResource } from "../hooks/useApiResource";
+import type { GoalPeriodFilter } from "../lib/api/goalsApi";
 import { buttonClass } from "../components/buttonStyles";
 
 export function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<"ALL" | GoalPeriod>("ALL");
+  const [period, setPeriod] = useState<GoalPeriodFilter>("monthly");
+  const [anchorDate, setAnchorDate] = useState(formatDateForInput());
   const [status, setStatus] = useState<"ALL" | GoalStatus>("ALL");
-
-  useEffect(() => {
-    virtualPlannerApi
-      .getGoals()
-      .then(setGoals)
-      .catch((e) => console.error("Erro ao buscar metas:", e))
-      .finally(() => setIsLoading(false));
-  }, []);
-
+  const [deletingId, setDeletingId] = useState<number>();
+  const [mutationError, setMutationError] = useState<string>();
+  const load = useCallback(
+    () => virtualPlannerApi.getGoals({ period, date: anchorDate }),
+    [period, anchorDate],
+  );
+  const resource = useApiResource(load);
+  const goals = resource.data ?? [];
+  const filtered = goals.filter(
+    (goal) => status === "ALL" || goal.status === status,
+  );
   async function handleDelete(id: number) {
+    if (deletingId !== undefined) return;
+    setDeletingId(id);
+    setMutationError(undefined);
     try {
       await virtualPlannerApi.deleteGoal(id);
-      setGoals((prev) => prev.filter((g) => g.id !== id));
+      resource.retry();
     } catch (error) {
-      console.error("Erro ao excluir meta:", error);
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir a meta.",
+      );
+    } finally {
+      setDeletingId(undefined);
     }
   }
-
-  const filtered = goals.filter(
-    (g) =>
-      (period === "ALL" || g.period === period) &&
-      (status === "ALL" || g.status === status),
-  );
 
   return (
     <>
@@ -64,20 +72,26 @@ export function GoalsPage() {
         }
       />
 
-      <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
+      <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
         <Field label="Período">
           <select
             className="select"
             value={period}
             onChange={(e) => setPeriod(e.target.value as typeof period)}
           >
-            <option value="ALL">Todos os períodos</option>
-            {(Object.keys(GOAL_PERIOD_LABELS) as GoalPeriod[]).map((p) => (
-              <option key={p} value={p}>
-                {GOAL_PERIOD_LABELS[p]}
-              </option>
-            ))}
+            <option value="weekly">Semanal</option>
+            <option value="monthly">Mensal</option>
+            <option value="yearly">Anual</option>
           </select>
+        </Field>
+        <Field label="Data de referência">
+          <input
+            type="date"
+            className="input"
+            value={anchorDate}
+            onChange={(e) => setAnchorDate(e.target.value)}
+            required
+          />
         </Field>
         <Field label="Status">
           <select
@@ -95,13 +109,16 @@ export function GoalsPage() {
         </Field>
       </Card>
 
-      {isLoading ? (
+      {mutationError && <ErrorState message={mutationError} />}
+      {resource.isLoading ? (
         <LoadingState label="Carregando metas…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Target size={28} strokeWidth={1.5} />}
           title="Nenhuma meta por aqui"
-          description="Crie sua primeira meta para começar a acompanhar o progresso."
+          description="Crie uma meta ou ajuste a janela e o status selecionados."
           action={
             <Link to="/goals/new" className={buttonClass("primary")}>
               <Plus size={16} strokeWidth={2.5} />
@@ -139,7 +156,10 @@ export function GoalsPage() {
                   <Pencil size={14} />
                   Editar
                 </Link>
-                <DangerConfirm onConfirm={() => handleDelete(goal.id)} />
+                <DangerConfirm
+                  disabled={deletingId !== undefined}
+                  onConfirm={() => handleDelete(goal.id)}
+                />
               </div>
             </div>
           ))}

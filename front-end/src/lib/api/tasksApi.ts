@@ -49,8 +49,38 @@ function scheduleBody(data: Partial<Task>): Record<string, unknown> {
   throw new Error("Informe um horário ou um turno para a tarefa.");
 }
 
-export async function listTasks(date?: string): Promise<Task[]> {
-  const query = date ? { start_date: date, end_date: date } : undefined;
+export interface TaskFilters {
+  start_date?: string;
+  end_date?: string;
+  category?: Task["category"];
+  priority?: Task["priority"];
+  status?: Task["status"];
+}
+
+export interface TaskConflict {
+  first_task_id: number;
+  second_task_id: number;
+}
+
+export async function getTaskConflicts(date: string): Promise<TaskConflict[]> {
+  const result = await request<{ conflicts: TaskConflict[] }>(
+    "/tasks/conflicts",
+    { query: { date } },
+  );
+  return result.conflicts;
+}
+
+export async function listTasks(
+  filters?: string | TaskFilters,
+): Promise<Task[]> {
+  const values =
+    typeof filters === "string"
+      ? { start_date: filters, end_date: filters }
+      : filters;
+  const query: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values ?? {})) {
+    if (value) query[key] = value;
+  }
   const wire = await request<TaskWire[]>("/tasks", { query });
   return wire.map(fromWire);
 }

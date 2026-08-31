@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import {
   BrowserRouter,
+  Link,
   Routes,
   Route,
   useLocation,
   useNavigate,
 } from "react-router";
+import { EmptyState } from "./components/ui";
 import { AppShell } from "./components/layout/AppShell";
 
 import { DashboardPage } from "./pages/DashboardPage";
@@ -43,8 +45,7 @@ function MainLayout() {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
 
     const apply = () => {
-      const dark =
-        theme === "dark" || (theme === "system" && media.matches);
+      const dark = theme === "dark" || (theme === "system" && media.matches);
       root.classList.toggle("dark", dark);
     };
 
@@ -92,6 +93,20 @@ function MainLayout() {
 
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route
+          path="*"
+          element={
+            <EmptyState
+              title="Página não encontrada"
+              description="Confira o endereço ou volte ao resumo do dia."
+              action={
+                <Link to="/" className="btn btn-primary">
+                  Voltar ao início
+                </Link>
+              }
+            />
+          }
+        />
       </Routes>
     </AppShell>
   );

@@ -88,6 +88,27 @@ int main()
       transaction.commit();
     }
 
+    // Simula a queda apenas da conexao deste teste, sem parar o banco compartilhado.
+    int backend_pid;
+    {
+      pqxx::work transaction(database.connection());
+      backend_pid = transaction.exec("SELECT pg_backend_pid()").one_row()[0].as<int>();
+      transaction.commit();
+    }
+    {
+      PostgresDatabase control(PostgresConfig::from_environment());
+      control.connect();
+      pqxx::work transaction(control.connection());
+      const auto terminated = transaction.exec(
+          "SELECT pg_terminate_backend($1, 5000)",
+          pqxx::params{transaction, backend_pid}).one_row()[0].as<bool>();
+      VP_EXPECT(terminated, "the test connection should be terminated");
+      transaction.commit();
+    }
+    const virtual_planner::persistence::Database& health_database = database;
+    VP_EXPECT(!health_database.is_connected(),
+              "health must detect a connection lost after successful startup");
+
     database.shutdown();
     VP_EXPECT(!database.is_connected(), "database should be disconnected after shutdown");
   }

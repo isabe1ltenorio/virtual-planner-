@@ -1,9 +1,9 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 // O alvo do proxy de desenvolvimento. Sobrescreva com VP_API_TARGET quando o
 // backend não estiver em 127.0.0.1:8080.
-const apiTarget = process.env.VP_API_TARGET ?? 'http://127.0.0.1:8080'
+const apiTarget = process.env.VP_API_TARGET ?? "http://127.0.0.1:8080";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -22,10 +22,10 @@ export default defineConfig({
     // Por isso o valor recomendado em desenvolvimento é VITE_API_URL=/api, e
     // não a URL absoluta do backend.
     proxy: {
-      '/api': {
+      "/api": {
         target: apiTarget,
         changeOrigin: true,
       },
     },
   },
-})
+});

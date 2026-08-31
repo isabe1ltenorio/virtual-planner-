@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Plus, Pencil, LayoutGrid, List, CheckSquare } from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
@@ -10,6 +10,7 @@ import {
   TASK_STATUS_COLORS,
   PRIORITY_LABELS,
   formatMinutesToTime,
+  formatDateShort,
   SHIFT_LABELS,
 } from "../lib/formatters";
 import {
@@ -17,10 +18,12 @@ import {
   Card,
   DangerConfirm,
   EmptyState,
+  ErrorState,
   Field,
   LoadingState,
   PageHeader,
 } from "../components/ui";
+import { useApiResource } from "../hooks/useApiResource";
 import { buttonClass } from "../components/buttonStyles";
 
 type View = "list" | "board";
@@ -39,39 +42,46 @@ function taskTime(task: Task): string | null {
 }
 
 export function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState<"ALL" | TaskStatus>("ALL");
   const [category, setCategory] = useState<"ALL" | Category>("ALL");
   const [view, setView] = useState<View>("list");
   const [groupBy, setGroupBy] = useState<GroupBy>("category");
 
-  useEffect(() => {
-    virtualPlannerApi
-      .getTasks()
-      .then(setTasks)
-      .catch((e) => console.error("Erro ao buscar tarefas:", e))
-      .finally(() => setIsLoading(false));
-  }, []);
-
+  const [priority, setPriority] = useState<"ALL" | Priority>("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [deletingId, setDeletingId] = useState<number>();
+  const [mutationError, setMutationError] = useState<string>();
+  const load = useCallback(
+    () =>
+      virtualPlannerApi.getTasks({
+        start_date: startDate,
+        end_date: endDate,
+        status: status === "ALL" ? undefined : status,
+        category: category === "ALL" ? undefined : category,
+        priority: priority === "ALL" ? undefined : priority,
+      }),
+    [startDate, endDate, status, category, priority],
+  );
+  const resource = useApiResource(load);
+  const filtered = useMemo(() => resource.data ?? [], [resource.data]);
   async function handleDelete(id: number) {
+    if (deletingId !== undefined) return;
+    setDeletingId(id);
+    setMutationError(undefined);
     try {
       await virtualPlannerApi.deleteTask(id);
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-    } catch (e) {
-      console.error("Erro ao excluir tarefa:", e);
+      resource.retry();
+    } catch (error) {
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir a tarefa.",
+      );
+    } finally {
+      setDeletingId(undefined);
     }
   }
-
-  const filtered = useMemo(
-    () =>
-      tasks.filter(
-        (t) =>
-          (status === "ALL" || t.status === status) &&
-          (category === "ALL" || t.category === category),
-      ),
-    [tasks, status, category],
-  );
 
   const columns = useMemo(() => {
     const keys =
@@ -109,7 +119,7 @@ export function TasksPage() {
         }
       />
 
-      <Card className="flex flex-col gap-4 p-4 sm:flex-row sm:items-end">
+      <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
         <Field label="Status">
           <select
             className="select"
@@ -139,7 +149,38 @@ export function TasksPage() {
           </select>
         </Field>
 
-        <div className="flex gap-2 sm:ml-auto">
+        <Field label="Prioridade">
+          <select
+            className="select"
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as typeof priority)}
+          >
+            <option value="ALL">Todas</option>
+            {(Object.keys(PRIORITY_LABELS) as Priority[]).map((value) => (
+              <option key={value} value={value}>
+                {PRIORITY_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Data inicial">
+          <input
+            type="date"
+            className="input"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </Field>
+        <Field label="Data final">
+          <input
+            type="date"
+            className="input"
+            min={startDate || undefined}
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </Field>
+        <div className="flex items-end gap-2">
           <div className="inline-flex rounded-lg border border-border-c bg-surface p-0.5">
             <button
               type="button"
@@ -171,8 +212,11 @@ export function TasksPage() {
         </div>
       </Card>
 
-      {isLoading ? (
+      {mutationError && <ErrorState message={mutationError} />}
+      {resource.isLoading ? (
         <LoadingState label="Carregando tarefas…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<CheckSquare size={28} strokeWidth={1.5} />}
@@ -202,6 +246,7 @@ export function TasksPage() {
                     {task.description}
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
+                    {formatDateShort(task.date)} ·{" "}
                     {CATEGORY_LABELS[task.category]}
                     {taskTime(task) && ` · ${taskTime(task)}`}
                   </p>
@@ -221,7 +266,10 @@ export function TasksPage() {
                   <Pencil size={14} />
                   Editar
                 </Link>
-                <DangerConfirm onConfirm={() => handleDelete(task.id)} />
+                <DangerConfirm
+                  disabled={deletingId !== undefined}
+                  onConfirm={() => handleDelete(task.id)}
+                />
               </div>
             </div>
           ))}

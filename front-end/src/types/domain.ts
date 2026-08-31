@@ -1,39 +1,22 @@
 export type Category =
-  | "College"
-  | "Work"
-  | "Health"
-  | "Leisure"
-  | "PersonalProjects"
-  | "Study";
+  "College" | "Work" | "Health" | "Leisure" | "PersonalProjects" | "Study";
 
 export type GoalPeriod = "Weekly" | "Monthly" | "Yearly";
 
 export type GoalStatus =
-  | "In Progress"
-  | "Completed"
-  | "Partially Completed"
-  | "Failed";
+  "In Progress" | "Completed" | "Partially Completed" | "Failed";
 
 export type Priority = "Low" | "Medium" | "High";
 
 export type ReminderRecurrence = "Once" | "Daily" | "Weekly" | "Monthly";
 
 export type ReminderType =
-  | "Meeting"
-  | "PhoneCall"
-  | "Shopping"
-  | "Study"
-  | "Exercise"
-  | "Assignment";
+  "Meeting" | "PhoneCall" | "Shopping" | "Study" | "Exercise" | "Assignment";
 
 export type Shift = "Morning" | "Afternoon" | "Evening";
 
 export type TaskStatus =
-  | "Pending"
-  | "Executed"
-  | "PartiallyExecuted"
-  | "Cancelled"
-  | "Postponed";
+  "Pending" | "Executed" | "PartiallyExecuted" | "Cancelled" | "Postponed";
 
 // Regra de sobreposição de horários
 export interface TimeSlot {

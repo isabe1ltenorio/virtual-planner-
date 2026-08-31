@@ -404,6 +404,55 @@ int main()
             VP_EXPECT(body.at("error").at("code") == "not_found",
                       "deleting a missing task should use not_found");
         }
+        // Conflitos usam a regra do dominio, a data e o dono autenticado.
+        {
+            const domain::Date date{31, 8, 2026};
+            const auto first = tasks.save(
+                task(date, domain::Category::Study, domain::Priority::High,
+                     domain::TaskStatus::Pending, morning), alice.id);
+            const auto second = tasks.save(
+                task(date, domain::Category::Work, domain::Priority::High,
+                     domain::TaskStatus::Pending, morning), alice.id);
+            tasks.save(task(date, domain::Category::Work, domain::Priority::High,
+                            domain::TaskStatus::Pending, mid_morning), alice.id);
+            tasks.save(task(date, domain::Category::Work, domain::Priority::High,
+                            domain::TaskStatus::Cancelled, morning), alice.id);
+
+            const auto response = client.Get("/api/tasks/conflicts?date=2026-08-31");
+            VP_EXPECT(response && response->status == 200,
+                      "task conflicts should answer 200");
+            const auto conflicts = nlohmann::json::parse(response->body).at("conflicts");
+            VP_EXPECT(conflicts.size() == 1,
+                      "adjacent and cancelled tasks should not conflict");
+            VP_EXPECT(conflicts.at(0).at("first_task_id") == first &&
+                          conflicts.at(0).at("second_task_id") == second,
+                      "the API should expose the conflicting task identifiers");
+            const auto empty = client.Get("/api/tasks/conflicts?date=2026-09-01");
+            VP_EXPECT(empty && empty->status == 200 &&
+                          nlohmann::json::parse(empty->body).at("conflicts").empty(),
+                      "another date should have no conflicts");
+            for (const auto* path : {"/api/tasks/conflicts",
+                                     "/api/tasks/conflicts?date=invalid"})
+            {
+                const auto invalid = client.Get(path);
+                VP_EXPECT(invalid && invalid->status == 400,
+                          "a missing or invalid conflict date should answer 400");
+            }
+
+            const auto bob = testing::register_and_login(
+                client, "conflicts-bob@example.com", "Bob");
+            testing::authenticate_as(client, bob);
+            tasks.save(task(date, domain::Category::Work, domain::Priority::High,
+                            domain::TaskStatus::Pending, morning), bob.id);
+            const auto other_owner = client.Get("/api/tasks/conflicts?date=2026-08-31");
+            VP_EXPECT(other_owner && other_owner->status == 200 &&
+                          nlohmann::json::parse(other_owner->body).at("conflicts").empty(),
+                      "conflicts must not mix owners or reveal another user's tasks");
+            client.set_default_headers({});
+            const auto anonymous = client.Get("/api/tasks/conflicts?date=2026-08-31");
+            VP_EXPECT(anonymous && anonymous->status == 401,
+                      "conflict queries require a session");
+        }
     });
 
     return 0;

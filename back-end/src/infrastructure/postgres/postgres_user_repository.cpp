@@ -1,4 +1,5 @@
 #include "virtual_planner/infrastructure/postgres/postgres_user_repository.hpp"
+#include "virtual_planner/shared/errors.hpp"
 
 #if defined(VIRTUAL_PLANNER_WITH_POSTGRES)
 
@@ -29,14 +30,19 @@ PostgresUserRepository::PostgresUserRepository(PostgresDatabase& database)
 // depois de um find_by_id bem-sucedido, entao aqui e apenas UPDATE.
 void PostgresUserRepository::save(const domain::User& user)
 {
-    pqxx::work transaction(database_.connection());
-
-    transaction.exec(
-        "UPDATE users SET name = $1, email = $2 WHERE id = $3",
-        pqxx::params{transaction, user.name(), user.email(), user.id()})
-        .no_rows();
-
-    transaction.commit();
+    try
+    {
+        pqxx::work transaction(database_.connection());
+        transaction.exec(
+            "UPDATE users SET name = $1, email = $2 WHERE id = $3",
+            pqxx::params{transaction, user.name(), user.email(), user.id()})
+            .no_rows();
+        transaction.commit();
+    }
+    catch (const pqxx::unique_violation&)
+    {
+        throw shared::ConflictError("User email is already registered.");
+    }
 }
 
 std::optional<domain::User> PostgresUserRepository::find_by_id(std::uint64_t id)
@@ -87,18 +93,21 @@ void PostgresUserRepository::remove(std::uint64_t id)
 std::uint64_t PostgresUserRepository::create(
     const domain::User& user, const std::string& password_hash)
 {
-    pqxx::work transaction(database_.connection());
-
-    const auto result = transaction.exec(
-        "INSERT INTO users (name, email, password_hash) "
-        "VALUES ($1, $2, $3) RETURNING id",
-        pqxx::params{transaction, user.name(), user.email(), password_hash});
-
-    const auto id = result.one_row()["id"].as<std::uint64_t>();
-
-    transaction.commit();
-
-    return id;
+    try
+    {
+        pqxx::work transaction(database_.connection());
+        const auto result = transaction.exec(
+            "INSERT INTO users (name, email, password_hash) "
+            "VALUES ($1, $2, $3) RETURNING id",
+            pqxx::params{transaction, user.name(), user.email(), password_hash});
+        const auto id = result.one_row()["id"].as<std::uint64_t>();
+        transaction.commit();
+        return id;
+    }
+    catch (const pqxx::unique_violation&)
+    {
+        throw shared::ConflictError("User email is already registered.");
+    }
 }
 
 std::optional<persistence::UserCredentials>

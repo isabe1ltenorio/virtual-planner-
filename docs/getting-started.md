@@ -10,35 +10,35 @@
 ## Build Padrão
 
 ```bash
-cmake -S . -B build
-cmake --build build
+cmake -S back-end -B back-end/build
+cmake --build back-end/build
 ```
 
 ## Testes Padrão
 
 ```bash
-ctest --test-dir build --output-on-failure
+ctest --test-dir back-end/build --output-on-failure
 ```
 
-Os testes padrão atuais cobrem configuração da aplicação, ciclo de vida base de persistência e configuração PostgreSQL. Testes unitários específicos do domínio devem ser adicionados junto com a evolução das entidades, value objects e services.
+Os testes padrão cobrem configuração, persistência em memória, domínio, casos de uso e relatórios. O build com HTTP acrescenta testes JSON e chamadas reais ao servidor; o build PostgreSQL acrescenta testes de integração, que precisam de banco e variáveis de ambiente para não serem pulados.
 
 ## Execução Padrão
 
 ```bash
-./build/virtual_planner
+./back-end/build/virtual_planner
 ```
 
 Variáveis de ambiente opcionais:
 
 ```bash
-VP_APP_NAME=virtual-planner VP_PROFILE=development ./build/virtual_planner
+VP_APP_NAME=virtual-planner VP_PROFILE=development ./back-end/build/virtual_planner
 ```
 
 ## Build Com PostgreSQL
 
 ```bash
-cmake -S . -B build-postgres -DVIRTUAL_PLANNER_WITH_POSTGRES=ON
-cmake --build build-postgres
+cmake -S back-end -B back-end/build-postgres -DVIRTUAL_PLANNER_WITH_POSTGRES=ON
+cmake --build back-end/build-postgres
 ```
 
 Esse build exige `libpqxx`. Se a dependência não estiver disponível, o CMake falha com mensagem clara.
@@ -46,7 +46,7 @@ Esse build exige `libpqxx`. Se a dependência não estiver disponível, o CMake 
 ## Executar Com PostgreSQL
 
 ```bash
-VP_USE_POSTGRES=true ./build-postgres/virtual_planner
+VP_USE_POSTGRES=true ./back-end/build-postgres/virtual_planner
 ```
 
 Também configure as variáveis `POSTGRES_*` descritas em `.env.example`.

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
-import type { Task } from "../types/domain";
+import type { ReminderOccurrence } from "../lib/api/remindersApi";
+import type { Reminder, Task } from "../types/domain";
 import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
@@ -21,29 +22,36 @@ interface DayTimelineProps {
   tasks: Task[]; // já filtradas para o dia
   onStatusChange: (id: number, status: Task["status"]) => void;
   updatingTaskIds?: ReadonlySet<number>;
+  occurrences?: ReminderOccurrence[];
+  conflictTaskIds?: ReadonlySet<number>;
   /** Clique numa faixa vazia da timeline → minuto arredondado a 15. */
   onEmptyClick?: (minutes: number) => void;
 }
 
-const PX_PER_MIN = 0.55; // 1h ≈ 33px — compacto; o container rola se passar
+const PX_PER_MIN = 1.2; // 1h = 72px; agendas longas rolam dentro do card.
+const MIN_BLOCK_H = 24;
 const MAX_TRACK_H = 460;
 const HOUR = 60;
 
-// Empacota tarefas que se sobrepõem em colunas lado a lado.
-function assignLanes(tasks: Task[]) {
-  const sorted = [...tasks].sort(
-    (a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0),
-  );
+type TimelineItem = { key: string; start: number; end: number } & (
+  { kind: "task"; entity: Task } | { kind: "reminder"; entity: Reminder }
+);
+
+// Colunas são apenas apresentação; a indicação de conflito vem da API.
+function assignLanes(items: TimelineItem[]) {
+  const sorted = [...items].sort((a, b) => a.start - b.start);
   const laneEnds: number[] = [];
-  const placed = sorted.map((task) => {
-    const start = task.startMinutes ?? 0;
-    let lane = laneEnds.findIndex((end) => end <= start);
+  const placed = sorted.map((item) => {
+    let lane = laneEnds.findIndex((end) => end <= item.start);
     if (lane === -1) {
       lane = laneEnds.length;
       laneEnds.push(0);
     }
-    laneEnds[lane] = task.endMinutes ?? start + 30;
-    return { task, lane };
+    laneEnds[lane] = Math.max(
+      item.end,
+      item.start + (MIN_BLOCK_H + 3) / PX_PER_MIN,
+    );
+    return { item, lane };
   });
   return { placed, lanes: Math.max(laneEnds.length, 1) };
 }
@@ -52,11 +60,34 @@ export function DayTimeline({
   tasks,
   onStatusChange,
   updatingTaskIds,
+  occurrences,
+  conflictTaskIds,
   onEmptyClick,
 }: DayTimelineProps) {
-  const timed = useMemo(
-    () => tasks.filter((t) => t.startMinutes != null),
-    [tasks],
+  const timed = useMemo<TimelineItem[]>(
+    () => [
+      ...tasks.flatMap((task): TimelineItem[] =>
+        task.startMinutes == null
+          ? []
+          : [
+              {
+                key: `task-${task.id}`,
+                kind: "task",
+                entity: task,
+                start: task.startMinutes,
+                end: task.endMinutes ?? task.startMinutes + 30,
+              },
+            ],
+      ),
+      ...(occurrences ?? []).map(({ reminder, date }): TimelineItem => ({
+        key: `reminder-${reminder.id}-${date}`,
+        kind: "reminder",
+        entity: reminder,
+        start: reminder.startMinutes,
+        end: reminder.endMinutes,
+      })),
+    ],
+    [tasks, occurrences],
   );
   // Tarefas por turno: viram uma faixa larga na janela do turno.
   const shiftTasks = useMemo(
@@ -73,8 +104,8 @@ export function DayTimeline({
     const starts: number[] = [];
     const ends: number[] = [];
     timed.forEach((t) => {
-      starts.push(t.startMinutes ?? 0);
-      ends.push(t.endMinutes ?? 0);
+      starts.push(t.start);
+      ends.push(t.end);
     });
     shiftTasks.forEach((t) => {
       const w = SHIFT_WINDOW[t.shift as Shift];
@@ -84,7 +115,10 @@ export function DayTimeline({
     if (starts.length === 0) return { start: 8 * HOUR, end: 18 * HOUR };
     return {
       start: Math.max(0, Math.floor(Math.min(...starts) / HOUR) * HOUR - HOUR),
-      end: Math.min(24 * HOUR, Math.ceil(Math.max(...ends) / HOUR) * HOUR + HOUR),
+      end: Math.min(
+        24 * HOUR,
+        Math.ceil(Math.max(...ends) / HOUR) * HOUR + HOUR,
+      ),
     };
   }, [timed, shiftTasks]);
 
@@ -95,7 +129,10 @@ export function DayTimeline({
   }, [start, end]);
 
   const { placed, lanes } = useMemo(() => assignLanes(timed), [timed]);
-  const height = (end - start) * PX_PER_MIN;
+  const height = Math.max(
+    (end - start) * PX_PER_MIN,
+    ...timed.map((item) => (item.start - start) * PX_PER_MIN + MIN_BLOCK_H),
+  );
 
   return (
     <div>
@@ -115,7 +152,7 @@ export function DayTimeline({
         )
       ) : (
         <div
-          className="flex gap-3 overflow-y-auto pr-1"
+          className="flex gap-3 overflow-y-auto py-2 pr-1"
           style={{ maxHeight: MAX_TRACK_H }}
         >
           {/* Régua de horas */}
@@ -136,12 +173,13 @@ export function DayTimeline({
             className={`relative flex-1 border-l border-border-c ${
               onEmptyClick ? "cursor-copy" : ""
             }`}
-            style={{ height }}
+            style={{ height, minWidth: lanes * 160 }}
             onClick={(e) => {
               if (!onEmptyClick || e.target !== e.currentTarget) return;
               const y = e.nativeEvent.offsetY;
               const raw = start + y / PX_PER_MIN;
-              onEmptyClick(Math.round(raw / 15) * 15);
+              if (raw >= 24 * HOUR) return;
+              onEmptyClick(Math.min(24 * HOUR - 15, Math.round(raw / 15) * 15));
             }}
           >
             {hours.map((m) => (
@@ -152,16 +190,19 @@ export function DayTimeline({
               />
             ))}
 
-            {placed.map(({ task, lane }) => {
-              const s = task.startMinutes ?? start;
-              const e = task.endMinutes ?? s + 30;
-              const color = CATEGORY_COLORS[task.category];
+            {placed.map(({ item, lane }) => {
+              const s = item.start;
+              const e = item.end;
+              const color = CATEGORY_COLORS[item.entity.category];
+              const hasConflict =
+                item.kind === "task" && conflictTaskIds?.has(item.entity.id);
               const top = (s - start) * PX_PER_MIN;
-              const blockH = Math.max(24, (e - s) * PX_PER_MIN - 3);
+              const blockH = Math.max(MIN_BLOCK_H, (e - s) * PX_PER_MIN - 3);
+              const compact = blockH < 44;
               return (
                 <div
-                  key={task.id}
-                  className="absolute overflow-hidden rounded-md border-l-2 pl-2 pr-1.5 py-1 text-xs"
+                  key={item.key}
+                  className={`absolute overflow-hidden rounded-md border-l-2 pl-2 pr-1.5 py-1 text-xs ${hasConflict ? "ring-2 ring-red-600 dark:ring-red-400" : ""}`}
                   style={{
                     top,
                     height: blockH,
@@ -172,28 +213,57 @@ export function DayTimeline({
                   }}
                 >
                   <Link
-                    to={`/tasks/${task.id}/edit`}
-                    className="block truncate font-medium text-ink hover:underline"
+                    to={`/${item.kind === "task" ? "tasks" : "reminders"}/${item.entity.id}/edit`}
+                    className="flex min-w-0 items-center gap-1 font-medium text-ink hover:underline"
+                    title={`${item.entity.description} · ${formatMinutesToTime(s)}–${formatMinutesToTime(e)} · ${CATEGORY_LABELS[item.entity.category]}`}
                   >
-                    {task.description}
-                  </Link>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                    <span className="tabular-nums">
-                      {formatMinutesToTime(s)}–{formatMinutesToTime(e)}
-                    </span>
+                    {hasConflict && (
+                      <span
+                        className="shrink-0"
+                        aria-label="Conflito de horário"
+                      >
+                        ⚠
+                      </span>
+                    )}
+                    {compact && (
+                      <span className="shrink-0 whitespace-nowrap text-[11px] leading-4 tabular-nums">
+                        {formatMinutesToTime(s)}–{formatMinutesToTime(e)}
+                      </span>
+                    )}{" "}
                     <span className="truncate">
-                      · {CATEGORY_LABELS[task.category]}
+                      {item.kind === "reminder" ? "Lembrete: " : ""}
+                      {item.entity.description}
                     </span>
-                  </div>
-                  {blockH > 52 && (
-                    <div className="mt-1">
-                      <StatusMenu
-                        value={task.status}
-                        disabled={updatingTaskIds?.has(task.id)}
-                        onChange={(next) => onStatusChange(task.id, next)}
-                      />
+                  </Link>
+                  {!compact && (
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                      <span className="shrink-0 whitespace-nowrap tabular-nums">
+                        {formatMinutesToTime(s)}–{formatMinutesToTime(e)}
+                      </span>
+                      <span className="truncate">
+                        · {CATEGORY_LABELS[item.entity.category]}
+                      </span>
                     </div>
                   )}
+                  {item.kind === "task" &&
+                    blockH >= 60 &&
+                    conflictTaskIds?.has(item.entity.id) && (
+                      <span className="block font-semibold text-red-700 dark:text-red-300">
+                        Conflito de horário
+                      </span>
+                    )}
+                  {item.kind === "task" &&
+                    blockH >= (hasConflict ? 92 : 76) && (
+                      <div className="mt-1">
+                        <StatusMenu
+                          value={item.entity.status}
+                          disabled={updatingTaskIds?.has(item.entity.id)}
+                          onChange={(next) =>
+                            onStatusChange(item.entity.id, next)
+                          }
+                        />
+                      </div>
+                    )}
                 </div>
               );
             })}
@@ -233,6 +303,11 @@ export function DayTimeline({
                         >
                           {task.description}
                         </Link>
+                        {conflictTaskIds?.has(task.id) && (
+                          <span className="block font-semibold text-red-700 dark:text-red-300">
+                            Conflito de horário
+                          </span>
+                        )}
                         <div className="mt-1">
                           <StatusMenu
                             value={task.status}

@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
-import type { FormEvent } from "react";
-import { useNavigate, useParams, Link } from "react-router";
+import { useCallback, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import type {
   Reminder,
   Category,
@@ -8,6 +7,7 @@ import type {
   ReminderType,
 } from "../types/domain";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
+import { useApiResource } from "../hooks/useApiResource";
 import {
   formatDateForInput,
   formatMinutesToTime,
@@ -15,218 +15,216 @@ import {
   REMINDER_TYPE_LABELS,
   REMINDER_RECURRENCE_LABELS,
 } from "../lib/formatters";
-import { Button, Field, FormPage } from "../components/ui";
+import {
+  Button,
+  ErrorState,
+  Field,
+  FormPage,
+  LoadingState,
+  Select,
+} from "../components/ui";
 
 export type ReminderFormData = Omit<Reminder, "id">;
-
-function toFormData(reminder: Reminder): ReminderFormData {
-  return {
-    description: reminder.description,
-    category: reminder.category,
-    date: reminder.date,
-    startMinutes: reminder.startMinutes,
-    endMinutes: reminder.endMinutes,
-    type: reminder.type,
-    recurrence: reminder.recurrence,
-  };
-}
-
-const toTime = (m: number) => formatMinutesToTime(m);
-const fromTime = (v: string) => {
-  const [h, m] = v.split(":").map(Number);
-  return h * 60 + (m || 0);
+const fromTime = (value: string) => {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
 };
 
 export function ReminderFormPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const isEditing = Boolean(id);
-  const [isLoading, setIsLoading] = useState(isEditing);
-  const [error, setError] = useState<string | null>(null);
-  const today = formatDateForInput();
-
-  const [form, setForm] = useState<ReminderFormData>({
-    description: "",
-    category: "Study",
-    date: today,
-    startMinutes: 480,
-    endMinutes: 540,
-    type: "Meeting",
-    recurrence: "Once",
-  });
-
-  useEffect(() => {
-    if (!isEditing || !id) return;
-    virtualPlannerApi
-      .getReminders()
-      .then((reminders) => {
-        const found = reminders.find((r) => r.id === Number(id));
-        if (found) setForm(toFormData(found));
-      })
-      .catch((err) => console.error("Erro ao carregar lembrete:", err))
-      .finally(() => setIsLoading(false));
-  }, [id, isEditing]);
-
-  const set = <K extends keyof ReminderFormData>(
-    key: K,
-    value: ReminderFormData[K],
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
-
-    if (form.date < today) {
-      setError("Não dá para agendar um lembrete no passado.");
-      return;
-    }
-    if (form.endMinutes <= form.startMinutes) {
-      setError("O fim precisa ser depois do início.");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      if (isEditing && id) {
-        await virtualPlannerApi.updateReminder(Number(id), form);
-      } else {
-        await virtualPlannerApi.createReminder(form);
-      }
-      navigate("/reminders");
-    } catch (err) {
-      console.error("Erro ao salvar o lembrete:", err);
-      setError("Não foi possível salvar. Tente novamente.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  const load = useCallback(
+    () =>
+      id
+        ? virtualPlannerApi.getReminderById(Number(id))
+        : Promise.resolve(undefined),
+    [id],
+  );
+  const resource = useApiResource(load);
   return (
     <FormPage
-      title={isEditing ? "Editar lembrete" : "Novo lembrete"}
+      title={id ? "Editar lembrete" : "Novo lembrete"}
       backLink={
-        <Link
-          to="/reminders"
-          className="text-sm font-medium text-muted hover:text-ink"
-        >
+        <Link to="/reminders" className="btn btn-ghost">
           Voltar
         </Link>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {resource.isLoading ? (
+        <LoadingState label="Carregando lembrete…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
+      ) : (
+        <ReminderForm key={id ?? "new"} id={id} initial={resource.data} />
+      )}
+    </FormPage>
+  );
+}
+
+function ReminderForm({ id, initial }: { id?: string; initial?: Reminder }) {
+  const navigate = useNavigate();
+  const today = formatDateForInput();
+  const submitting = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+  const [form, setForm] = useState<ReminderFormData>(() => ({
+    description: initial?.description ?? "",
+    category: initial?.category ?? "Study",
+    date: initial?.date ?? today,
+    startMinutes: initial?.startMinutes ?? 480,
+    endMinutes: initial?.endMinutes ?? 540,
+    type: initial?.type ?? "Meeting",
+    recurrence: initial?.recurrence ?? "Once",
+  }));
+  const set = <K extends keyof ReminderFormData>(
+    key: K,
+    value: ReminderFormData[K],
+  ) => setForm((previous) => ({ ...previous, [key]: value }));
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current) return;
+    if (!form.description.trim()) {
+      setError("Informe a descrição do lembrete.");
+      return;
+    }
+    if (!id && form.date < today) {
+      setError("Não dá para agendar um lembrete no passado.");
+      return;
+    }
+    if (
+      !Number.isInteger(form.startMinutes) ||
+      !Number.isInteger(form.endMinutes) ||
+      form.startMinutes < 0 ||
+      form.endMinutes > 1440 ||
+      form.endMinutes <= form.startMinutes
+    ) {
+      setError(
+        "Informe um intervalo válido: o fim precisa ser depois do início.",
+      );
+      return;
+    }
+    submitting.current = true;
+    setSaving(true);
+    setError(undefined);
+    try {
+      if (id) await virtualPlannerApi.updateReminder(Number(id), form);
+      else await virtualPlannerApi.createReminder(form);
+      navigate("/reminders");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível salvar o lembrete.",
+      );
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
+  }
+  return (
+    <form onSubmit={submit}>
+      <fieldset disabled={saving} className="space-y-5">
         <Field label="Descrição">
           <input
+            className="input"
+            required
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
-            required
-            disabled={isLoading}
-            className="input"
             placeholder="Ex.: reunião de alinhamento com a equipe"
           />
         </Field>
-
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Field label="Tipo">
-            <select
+            <Select
               value={form.type}
               onChange={(e) => set("type", e.target.value as ReminderType)}
-              disabled={isLoading}
-              className="select"
             >
-              {(Object.keys(REMINDER_TYPE_LABELS) as ReminderType[]).map((t) => (
-                <option key={t} value={t}>
-                  {REMINDER_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
+              {(Object.keys(REMINDER_TYPE_LABELS) as ReminderType[]).map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {REMINDER_TYPE_LABELS[value]}
+                  </option>
+                ),
+              )}
+            </Select>
           </Field>
-
           <Field label="Categoria">
-            <select
+            <Select
               value={form.category}
               onChange={(e) => set("category", e.target.value as Category)}
-              disabled={isLoading}
-              className="select"
             >
-              {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
+              {(Object.keys(CATEGORY_LABELS) as Category[]).map((value) => (
+                <option key={value} value={value}>
+                  {CATEGORY_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
-
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <Field label="Data">
+          <Field label="Data-base">
             <input
               type="date"
-              min={today}
+              className="input"
+              required
+              min={id ? undefined : today}
               value={form.date}
               onChange={(e) => set("date", e.target.value)}
-              required
-              disabled={isLoading}
-              className="input"
             />
           </Field>
           <Field label="Início">
             <input
               type="time"
-              value={toTime(form.startMinutes)}
-              onChange={(e) => set("startMinutes", fromTime(e.target.value))}
-              disabled={isLoading}
               className="input"
+              required
+              value={formatMinutesToTime(form.startMinutes)}
+              onChange={(e) => set("startMinutes", fromTime(e.target.value))}
             />
           </Field>
-          <Field label="Fim">
+          <Field label="Fim" hint="00:00 indica o fim do dia.">
             <input
               type="time"
-              value={toTime(form.endMinutes)}
-              onChange={(e) => set("endMinutes", fromTime(e.target.value))}
-              disabled={isLoading}
               className="input"
+              required
+              value={
+                form.endMinutes === 1440
+                  ? "00:00"
+                  : formatMinutesToTime(form.endMinutes)
+              }
+              onChange={(e) =>
+                set(
+                  "endMinutes",
+                  e.target.value === "00:00" ? 1440 : fromTime(e.target.value),
+                )
+              }
             />
           </Field>
         </div>
-
         <Field label="Recorrência">
-          <select
+          <Select
             value={form.recurrence}
             onChange={(e) =>
               set("recurrence", e.target.value as ReminderRecurrence)
             }
-            disabled={isLoading}
-            className="select"
           >
             {(
               Object.keys(REMINDER_RECURRENCE_LABELS) as ReminderRecurrence[]
-            ).map((r) => (
-              <option key={r} value={r}>
-                {REMINDER_RECURRENCE_LABELS[r]}
+            ).map((value) => (
+              <option key={value} value={value}>
+                {REMINDER_RECURRENCE_LABELS[value]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
-
-        {error && (
-          <p className="text-sm text-red-500" role="alert">
-            {error}
-          </p>
-        )}
-
+        {error && <ErrorState message={error} />}
         <div className="flex justify-end gap-2 border-t border-border-c pt-4">
           <Link to="/reminders" className="btn btn-ghost">
             Cancelar
           </Link>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading
-              ? "Salvando…"
-              : isEditing
-                ? "Salvar alterações"
-                : "Criar lembrete"}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Salvando…" : id ? "Salvar alterações" : "Criar lembrete"}
           </Button>
         </div>
-      </form>
-    </FormPage>
+      </fieldset>
+    </form>
   );
 }

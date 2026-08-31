@@ -8,7 +8,6 @@
 // isso que um XSS nesta aplicação não rouba a sessão de ninguém.
 
 import { ApiError, request } from "./httpClient";
-import { isApiEnabled } from "./config";
 
 export interface SessionUser {
   id: number;
@@ -20,11 +19,6 @@ export interface SessionUser {
 // subindo como exceção, porque tratar backend fora do ar como logout silencioso
 // esconderia o problema real de quem está desenvolvendo.
 export async function currentUser(): Promise<SessionUser | null> {
-  // Com os mocks não há sessão nem login: a aplicação inteira é local.
-  if (!isApiEnabled()) {
-    return { id: 0, name: "Modo mock", email: "mock@local" };
-  }
-
   try {
     return await request<SessionUser>("/auth/me");
   } catch (error) {

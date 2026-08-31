@@ -19,6 +19,7 @@
 #include "virtual_planner/api/http/server_config.hpp"
 #include "virtual_planner/api/http/routes/goal_routes.hpp"
 #include "virtual_planner/api/http/routes/task_routes.hpp"
+#include "virtual_planner/api/http/routes/user_routes.hpp"
 
 #endif
 
@@ -64,8 +65,8 @@ int main() {
             " log_level=" +
             std::string{virtual_planner::interfaces::to_string(logger.minimum())});
 
-    // In-memory e o padrao. User continua in-memory mesmo com o banco ligado,
-    // porque essa entidade ainda nao tem adapter PostgreSQL.
+    // In-memory e o padrao; com PostgreSQL todos os repositorios sao trocados
+    // pelos respectivos adapters abaixo.
     virtual_planner::persistence::InMemoryGoalRepository memory_goals;
     virtual_planner::persistence::InMemoryTaskRepository memory_tasks;
     virtual_planner::persistence::InMemoryReminderRepository memory_reminders;
@@ -129,6 +130,7 @@ int main() {
     virtual_planner::api::http::register_reminder_routes(server);
     virtual_planner::api::http::register_goal_routes(server);
     virtual_planner::api::http::register_task_routes(server);
+    virtual_planner::api::http::register_user_routes(server);
 
     const int port = server.bind(server_config);
 

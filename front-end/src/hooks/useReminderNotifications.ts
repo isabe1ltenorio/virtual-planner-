@@ -41,11 +41,7 @@ export function useReminderNotifications(): void {
       if (cancelled) return;
 
       const now = new Date();
-      const today = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const dayKey = today.toISOString().slice(0, 10);
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
 

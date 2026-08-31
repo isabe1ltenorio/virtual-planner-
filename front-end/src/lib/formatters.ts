@@ -32,8 +32,18 @@ export function formatDateShort(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   if (!y || !m || !d) return iso;
   const months = [
-    "jan", "fev", "mar", "abr", "mai", "jun",
-    "jul", "ago", "set", "out", "nov", "dez",
+    "jan",
+    "fev",
+    "mar",
+    "abr",
+    "mai",
+    "jun",
+    "jul",
+    "ago",
+    "set",
+    "out",
+    "nov",
+    "dez",
   ];
   return `${d} de ${months[m - 1]}`;
 }
@@ -129,3 +139,17 @@ export const GOAL_STATUS_COLORS: Record<GoalStatus, string> = {
   "Partially Completed": "#f59e0b",
   Failed: "#ef4444",
 };
+
+// null indica ausência de dados; zero continua sendo uma medição válida.
+export function formatRatio(value: number | null): string {
+  return value === null
+    ? "Sem dados"
+    : `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+export function formatRankingLabel(label: string): string {
+  if (Object.hasOwn(CATEGORY_LABELS, label))
+    return CATEGORY_LABELS[label as Category];
+  if (Object.hasOwn(SHIFT_LABELS, label)) return SHIFT_LABELS[label as Shift];
+  return label;
+}

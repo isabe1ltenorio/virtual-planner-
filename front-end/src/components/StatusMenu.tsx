@@ -30,7 +30,10 @@ export function StatusMenu({ value, onChange, disabled }: StatusMenuProps) {
     const r = btnRef.current.getBoundingClientRect();
     setPos({
       top: r.bottom + 4,
-      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+      left: Math.max(
+        8,
+        Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8),
+      ),
     });
   }, [open]);
 

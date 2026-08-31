@@ -35,4 +35,6 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     integration/api/task_routes_test.cpp
   )
   target_link_libraries(task_routes_test PRIVATE virtual_planner_http)
+  virtual_planner_add_test(user_routes_test integration/api/user_routes_test.cpp)
+  target_link_libraries(user_routes_test PRIVATE virtual_planner_http)
 endif()

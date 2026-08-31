@@ -7,6 +7,7 @@
 #include "virtual_planner/infrastructure/postgres/postgres_config.hpp"
 #include "virtual_planner/infrastructure/postgres/postgres_database.hpp"
 #include "virtual_planner/infrastructure/postgres/postgres_user_repository.hpp"
+#include "virtual_planner/shared/errors.hpp"
 
 #include "support/expect.hpp"
 
@@ -32,6 +33,7 @@ constexpr std::uint64_t kSeededUser = 1;
 // rodada falhar no create(). O dominio `.invalid` e reservado pela RFC 2606.
 const std::string kEmail = "p26-4-integration@local.invalid";
 const std::string kUpdatedEmail = "p26-4-integration-updated@local.invalid";
+const std::string kOtherEmail = "p26-4-integration-other@local.invalid";
 
 // Formato aceito por verifies_password() em auth_routes.cpp. O valor nao precisa
 // derivar de senha real: o repositorio so o grava e le de volta.
@@ -72,7 +74,8 @@ int main()
         for (const auto& leftover : repository.find_all())
         {
             if (leftover.email() == kEmail ||
-                leftover.email() == kUpdatedEmail)
+                leftover.email() == kUpdatedEmail ||
+                leftover.email() == kOtherEmail)
             {
                 repository.remove(leftover.id());
             }
@@ -152,6 +155,41 @@ int main()
                 credentials_after_save->password_hash == kPasswordHash,
             "save() must not overwrite the password hash");
 
+        VP_EXPECT(
+            !repository.find_credentials_by_email(kEmail).has_value(),
+            "save() must stop authenticating the old email");
+
+        bool duplicate_create_rejected = false;
+        try
+        {
+            repository.create(domain::User{0, "Duplicado", kUpdatedEmail}, kPasswordHash);
+        }
+        catch (const shared::ConflictError&)
+        {
+            duplicate_create_rejected = true;
+        }
+        VP_EXPECT(duplicate_create_rejected,
+                  "create() must report a duplicate email as a conflict");
+
+        const auto other_id = repository.create(
+            domain::User{0, "Outro Usuario", kOtherEmail}, kPasswordHash);
+        bool duplicate_update_rejected = false;
+        try
+        {
+            repository.save(domain::User{other_id, "Nao Persistir", kUpdatedEmail});
+        }
+        catch (const shared::ConflictError&)
+        {
+            duplicate_update_rejected = true;
+        }
+        VP_EXPECT(duplicate_update_rejected,
+                  "save() must report a duplicate email as a conflict");
+        const auto other = repository.find_by_id(other_id);
+        VP_EXPECT(other->name() == "Outro Usuario" && other->email() == kOtherEmail,
+                  "a rejected save must leave the other user's profile intact");
+        VP_EXPECT(repository.find_credentials_by_email(kOtherEmail)->password_hash == kPasswordHash,
+                  "a rejected save must leave the other user's credentials intact");
+
         // Assert find_all()
         const auto all_users = repository.find_all();
 
@@ -176,6 +214,7 @@ int main()
             "find_all() must include the seeded user from migration 001");
 
         // Cleanup
+        repository.remove(other_id);
         repository.remove(id);
 
         VP_EXPECT(

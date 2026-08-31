@@ -13,6 +13,8 @@ Permitir persistência real com PostgreSQL sem acoplar o núcleo da aplicação 
 - `infrastructure::postgres::PostgresDatabase`: abre, valida e encerra conexão PostgreSQL via `libpqxx`.
 - `infrastructure::postgres::PostgresTransaction`: encapsula `pqxx::work` e garante rollback automático se a transação sair de escopo sem `commit()`.
 - `infrastructure::postgres::PostgresGoalRepository`: persiste metas e consultas por intervalo de data no PostgreSQL.
+- `infrastructure::postgres::PostgresTaskRepository`: persiste tarefas, agendamento por horário/turno e status.
+- `infrastructure::postgres::PostgresUserRepository`: persiste perfis e credenciais, preservando o hash ao editar nome/e-mail.
 - `infrastructure::postgres::PostgresReminderRepository`: persiste lembretes no PostgreSQL, incluindo data, horário, tipo e regra de recorrência.
 - `persistence::InMemoryGoalRepository`, `InMemoryTaskRepository`, `InMemoryReminderRepository`, `InMemoryUserRepository`: implementações concretas em memória dos contratos de repositório, em `persistence/memory/`. Servem aos testes e a um modo de execução sem banco.
 
@@ -61,24 +63,35 @@ O projeto já possui contratos de repositório para entidades do domínio:
 
 Esses contratos ficam em `persistence` porque são portas estáveis do núcleo. Existe uma implementação concreta de cada um em memória, em `persistence/memory/` (`InMemoryGoalRepository`, `InMemoryTaskRepository`, `InMemoryReminderRepository`, `InMemoryUserRepository`), usada pelos testes e por um modo de execução sem banco.
 
-`GoalRepository` e `ReminderRepository` também possuem adapters concretos em `infrastructure/postgres`. O `PostgresReminderRepository` implementa `save` (INSERT com `RETURNING id`), `update`, `find_by_id`, `find_all` e `remove`, sempre com queries parametrizadas. A migration `040_create_reminders_table.sql` cria a tabela `reminders`, relacionada a `users` por `user_id`, e mantém as restrições dos enums de categoria, tipo e recorrência; a `041_alter_reminders_id_identity.sql` passa a geração do `id` para o banco.
+Os quatro contratos também possuem adapters concretos em `infrastructure/postgres`. O `PostgresReminderRepository` implementa `save` (INSERT com `RETURNING id`), `update`, `find_by_id`, `find_all` e `remove`, sempre com queries parametrizadas. A migration `040_create_reminders_table.sql` cria a tabela `reminders`, relacionada a `users` por `user_id`, e mantém as restrições dos enums de categoria, tipo e recorrência; a `041_alter_reminders_id_identity.sql` passa a geração do `id` para o banco.
 
 Na persistência de Reminder, `recurrence` é armazenada como metadado da regra (`Once`, `Daily`, `Weekly` ou `Monthly`) ancorada em `reminder_date`. O repository preserva essa regra e o horário original; ele não materializa antecipadamente ocorrências futuras em múltiplas linhas. A expansão das ocorrências, quando necessária, permanece responsabilidade da camada de aplicação.
 
-## Semântica de save
+## Semântica de gravação
 
-As quatro implementações em memória fixam uma semântica de referência para `save` que qualquer implementação futura — em particular a PostgreSQL — precisa reproduzir:
-
-1. **`Goal::save` e `Reminder::save` geram o id e ignoram o `id()` da entidade; `Task` e `User` ainda preservam o id do chamador.** A issue #90 alinhou `Reminder` ao padrão de `Goal`: `save` insere e devolve o id gerado, `update` altera quem já existe. `Task` e `User` continuam divergentes — para essas duas, "criar com um id escolhido" ainda é possível e "alterar" ainda é `save()`.
-2. **Os dois `save` sem `update` (`Task` e `User`) são upsert** — substituem quem já tem o mesmo `id()`, inserem caso contrário. Isso existe porque os contratos congelados não deram `update` a `TaskRepository` nem a `UserRepository`, e é exatamente o risco que a #90 removeu de `Reminder`: qualquer ponto de chamada que salve sem checar `find_by_id` antes sobrescreve um registro existente em silêncio. Quando `Task` e `User` ganharem adapter PostgreSQL, vale alinhá-los da mesma forma em vez de reproduzir o upsert.
-3. **`Reminder::save` nunca sobrescreve.** Uma entidade que carrega um id já existente gera uma linha nova, não uma substituição. Isso vale tanto no in-memory quanto no PostgreSQL, onde o id vem da identity criada em `041_alter_reminders_id_identity.sql`.
-4. **A ordem de `find_all()` não é especificada.** O in-memory devolve ordem de inserção; o PostgreSQL sem `ORDER BY` devolve o que o planner der. Nenhum teste fixa isso hoje, então um teste de caso de uso que assere `find_all()[0]` passaria in-memory e quebraria no PostgreSQL. Quem precisar de ordem estável deve ordenar explicitamente no caso de uso.
+- Goal, Task e Reminder geram IDs em `save`; o ID recebido na entidade é
+  ignorado. `update` altera um recurso existente do mesmo dono.
+- User cadastra contas em `create(user, password_hash)`, que gera o ID. O
+  fluxo de perfil consulta o usuário da sessão antes de chamar `save` para
+  editar nome/e-mail sem sobrescrever credenciais. O adapter PostgreSQL usa
+  UPDATE; o comportamento de seed do adapter em memória serve aos testes.
+- E-mail duplicado em cadastro ou edição gera `ConflictError` nos dois
+  adapters. Uma falha de unicidade PostgreSQL aborta a transação e preserva
+  o perfil e a credencial anteriores.
+- A ordem de `find_all()` não é um contrato de domínio. Quem depende de uma
+  ordenação específica deve defini-la no caso de uso ou na apresentação.
+- Goal, Task e Reminder recebem o dono em todas as consultas e mutações;
+  handlers HTTP passam explicitamente a identidade da sessão.
 
 ## Limitações
 
-- Sem pool de conexões.
-- Sem migrations aplicadas automaticamente.
-- Sem adapters PostgreSQL concretos para Task e User.
-- Os repositórios em memória (`persistence/memory/`) não são thread-safe: cada um guarda um `std::vector` sem lock nenhum. O `httplib::Server` escolhido na ADR-003 despacha handlers num thread pool por padrão, então quando a Onda 2 (issue #29 / P-28) ligar um repositório em memória atrás desse servidor, chamadas concorrentes vão mutar o `std::vector` sem proteção — uma data race que se manifesta como corrupção intermitente, não como falha limpa. Quem serializar o acesso é o chamador; nada nesses repositórios faz isso hoje.
+- Não há pool de conexões; uma conexão libpqxx é compartilhada pela API.
+- A API usa uma thread de atendimento, evitando transações concorrentes na
+  mesma conexão e mutações paralelas dos repositórios em memória.
+- Migrações não são executadas pelo binário: use o script ou serviço `migrate`
+  do Compose, que termina antes de iniciar a API.
+- Sessões não persistem no banco. Reiniciar a API exige novo login, sem perder
+  a conta ou os recursos quando PostgreSQL está habilitado.
 
-Essas limitações são intencionais para evitar complexidade prematura no escopo acadêmico atual.
+Esses limites mantêm o escopo acadêmico simples; não equivalem a uma topologia
+pronta para múltiplas instâncias públicas.

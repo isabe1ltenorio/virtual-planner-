@@ -20,6 +20,7 @@ namespace virtual_planner::infrastructure::postgres
 
     [[nodiscard]] pqxx::connection &connection();
     [[nodiscard]] const PostgresConfig &config() const noexcept;
+    [[nodiscard]] bool is_connected() const noexcept override;
 
   protected:
     void on_initialize() override;

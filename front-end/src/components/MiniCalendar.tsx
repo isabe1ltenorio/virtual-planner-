@@ -22,11 +22,26 @@ interface MiniCalendarProps {
 
 const WEEKDAYS = ["D", "S", "T", "Q", "Q", "S", "S"];
 const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
 ];
 
-export function MiniCalendar({ value, onChange, onMonthChange, marked }: MiniCalendarProps) {
+export function MiniCalendar({
+  value,
+  onChange,
+  onMonthChange,
+  marked,
+}: MiniCalendarProps) {
   const selected = new Date(`${value}T00:00:00`);
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(selected));
 

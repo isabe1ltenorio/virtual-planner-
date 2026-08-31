@@ -15,10 +15,12 @@ rota exige o cookie `vp_session`; ver [Autenticação](#autenticação).
 |---|---|---|---|---|
 | `OPTIONS` | qualquer caminho | não | `204` | `403` origem não autorizada |
 | `GET` | `/api/health` | não | `200` | — |
-| `POST` | `/api/auth/register` | não | `201` | `400` |
+| `POST` | `/api/auth/register` | não | `201` | `400`, `409` |
 | `POST` | `/api/auth/login` | não | `204` | `400`, `401` |
 | `POST` | `/api/auth/logout` | sim | `204` | — |
 | `GET` | `/api/auth/me` | sim | `200` | `401` sessão órfã |
+| `GET` | `/api/users/me` | sim | `200` | `404` perfil inexistente |
+| `PATCH` | `/api/users/me` | sim | `200` | `400`, `404`, `409` |
 | `GET` | `/api/goals` | sim | `200` | `400` |
 | `POST` | `/api/goals` | sim | `201` | `400` |
 | `GET` | `/api/goals/:id` | sim | `200` | `404` |
@@ -26,6 +28,7 @@ rota exige o cookie `vp_session`; ver [Autenticação](#autenticação).
 | `PATCH` | `/api/goals/:id/status` | sim | `200` | `400`, `404` |
 | `DELETE` | `/api/goals/:id` | sim | `204` | `404` |
 | `GET` | `/api/tasks` | sim | `200` | `400` |
+| `GET` | `/api/tasks/conflicts?date=` | sim | `200` | `400` |
 | `POST` | `/api/tasks` | sim | `201` | `400` |
 | `GET` | `/api/tasks/:id` | sim | `200` | `404` |
 | `PATCH` | `/api/tasks/:id` | sim | `200` | `400`, `404` |
@@ -59,14 +62,9 @@ e `400` como o mesmo caso.
 Documentar o que não existe é tão parte do contrato quanto documentar o que
 existe: sem isto o cliente descobre a ausência em tempo de execução.
 
-`User` não tem endpoints de CRUD. O que existe é o que `/api/auth/*` expõe:
-criar conta, abrir e encerrar sessão e ler o próprio perfil. Não há como listar
-usuários, editar nome ou e-mail, nem trocar senha pela API.
-
-`Goal`, `Task` e `Reminder` têm representação JSON **e** endpoints, todos na
-tabela acima. `User` é o caso invertido: tem representação JSON (seção
-[`User`](#user), P-29.4), mas nenhum endpoint próprio — o payload é usado por
-`GET /api/auth/me`.
+Não há listagem pública de usuários, remoção de conta ou troca de senha pela
+API. O perfil autenticado pode ser consultado e editado em `/api/users/me`.
+Cadastro, login e logout continuam em `/api/auth/*`.
 
 ## Onde está o código
 
@@ -77,6 +75,7 @@ tabela acima. `User` é o caso invertido: tem representação JSON (seção
 - Servidor: `back-end/include/virtual_planner/api/http/api_server.hpp` e
   `back-end/src/api/http/api_server.cpp`
 - Autenticação: `back-end/src/api/http/routes/auth_routes.cpp`
+- Perfil: `back-end/src/api/http/routes/user_routes.cpp`
 - Rotas de `Goal`: `back-end/src/api/http/routes/goal_routes.cpp`
 - Rotas de `Task`: `back-end/src/api/http/routes/task_routes.cpp`
 - Relatórios: `back-end/include/virtual_planner/api/http/routes/reporting_routes.hpp`
@@ -151,10 +150,11 @@ para caminho que não existe. Isso é deliberado: responder `404` para rota
 inexistente e `401` para rota existente deixaria qualquer anônimo mapear a
 superfície da API só variando o caminho.
 
-A sessão viaja num cookie `vp_session`, marcado `HttpOnly` (JavaScript não o
-lê, então XSS não rouba a sessão) e `SameSite=Strict` (o navegador não o envia
-em requisição vinda de outro site, o que fecha CSRF). Em `VP_PROFILE=production`
-ele ganha `Secure`, e só trafega sobre HTTPS.
+A sessão viaja num cookie `vp_session`, marcado `HttpOnly` para impedir sua
+leitura direta pelo JavaScript e `SameSite=Strict` para restringir seu envio
+entre sites. Essas medidas reduzem exposição e risco de CSRF, mas não tornam
+a aplicação imune a XSS. Em `VP_PROFILE=production` o cookie ganha `Secure`
+e só trafega sobre HTTPS.
 
 Como a sessão é cookie e não cabeçalho, o CORS responde
 `Access-Control-Allow-Credentials: true` e ecoa a origem em vez de devolver
@@ -174,10 +174,9 @@ Responde **201** com `{"id": 1, "email": "alice@example.com"}`. A senha exige
 no mínimo 12 caracteres e é guardada como PBKDF2-SHA256 com salt por usuário e
 210 000 iterações — nunca em texto claro. Registrar **não** abre sessão.
 
-E-mail já cadastrado responde **400** com `code="validation_error"`, e não
-`409`: o repositório sinaliza o caso com `std::invalid_argument`, que o
-mapeamento global trata como entrada inválida. Ramifique pelo `code`, não pelo
-status, se precisar distinguir esse caso de um campo faltando.
+E-mail já cadastrado responde **409** com `code="conflict"`, tanto no
+repositório em memória quanto no PostgreSQL. Campos inválidos respondem
+**400** com `code="validation_error"`.
 
 ### `POST /api/auth/login`
 
@@ -195,8 +194,8 @@ entregaria uma lista de quem tem conta.
 
 ### `POST /api/auth/logout`
 
-Responde **204** e invalida a sessão no servidor, além de expirar o cookie. Não
-depende de o cookie ainda ser válido.
+Responde **204** e invalida a sessão no servidor, além de expirar o cookie.
+Sem sessão válida, o gate de autenticação responde **401**.
 
 ### `GET /api/auth/me`
 
@@ -212,13 +211,15 @@ domínio — com o dashboard já renderizado e vazio.
 
 O caso de borda tem resposta própria: se a sessão apontar para um usuário que
 não existe mais, o servidor encerra a sessão e responde **401** com
-`code="unauthorized"`. Isso acontece hoje a cada reinício do processo, porque
-`UserRepository` só existe em memória.
+`code="unauthorized"`. As sessões ficam em memória e se perdem no reinício.
+Com PostgreSQL habilitado, as contas e credenciais persistem: basta fazer
+login novamente, sem novo cadastro.
 
 ## Escopo por dono
 
-As rotas de `Goal`, de `Task` e de relatórios operam exclusivamente sobre o que
-é de quem chamou.
+As rotas de `Goal`, `Task`, `Reminder`, conflitos e relatórios operam
+exclusivamente sobre os dados de quem chamou. `/api/users/me` usa o mesmo
+identificador da sessão, nunca um identificador fornecido no payload.
 
 Pedir um recurso de outra pessoa responde **404**, e não 403: um 403
 confirmaria ao chamador que aquele identificador existe. Vale para leitura,
@@ -228,19 +229,10 @@ A verificação vive na assinatura do repositório
 (`find_by_id(id, user_id)`), e não em cada handler — assim uma rota nova não
 consegue esquecer de verificar, porque não compila sem o dono.
 
-### `Reminder` é a exceção, e isso é um defeito conhecido
-
-`ReminderRepository` **não recebe o dono em nenhum método**
-(`back-end/include/virtual_planner/persistence/reminder_repository.hpp`).
-Na prática, com dois usuários registrados, os dois enxergam, editam e removem
-os mesmos lembretes.
-
-Está documentado aqui porque é o contrato observável hoje, não porque seja
-aceitável. É a mesma classe de falha que a issue #112 fechou para `Goal`, e
-precisa da mesma correção: o dono na assinatura do repositório, e não uma
-checagem repetida em cada handler.
-
-**Não construa nada sobre a suposição de que lembrete é privado.**
+`ReminderRepository` também recebe `user_id`; as rotas passam explicitamente
+o dono da sessão tanto no CRUD quanto na expansão de ocorrências. O valor
+padrão legado de algumas assinaturas serve aos testes anteriores ao isolamento
+e não deve ser usado como identidade em handlers HTTP.
 
 ## `GET /api/health`
 
@@ -264,6 +256,11 @@ saber; o campo `status` distingue os graus de saúde.
 | `database.configured` | `true` quando a composition root ligou um banco |
 | `database.connected` | `true` quando esse banco está conectado |
 | `status` | `"ok"` sem banco ou com banco conectado; `"degraded"` quando há banco configurado e ele está fora do ar |
+
+Com PostgreSQL, `connected` verifica a conexão real com `SELECT 1`, não apenas
+o estado salvo na inicialização. Uma conexão perdida produz `degraded`, sem
+expor erro ou credencial do driver. A API não reconecta automaticamente: após
+restabelecer o banco, reinicie a API e faça login novamente.
 
 A aplicação sobe e responde **sem PostgreSQL**: nesse caso `configured` é
 `false` e o `status` continua `"ok"`, porque não há banco para estar caído.
@@ -561,6 +558,24 @@ domain::User user_from_json(const nlohmann::json& value);
 
 Declaradas em `back-end/include/virtual_planner/api/json/user_json.hpp`.
 
+### `GET /api/users/me` e `PATCH /api/users/me` (P-33)
+
+O GET retorna **200** com o perfil `{ "id": 2, "name": "Alice", "email":
+"alice@example.com" }`. O PATCH aceita atualização parcial de `name` e
+`email`; campos omitidos são preservados e o perfil atualizado é retornado
+com **200**.
+
+```json
+{ "name": "Alice Silva" }
+```
+
+O dono vem exclusivamente da sessão. Campos extras, inclusive `id`, `user_id`,
+`password` e `password_hash`, são recusados com **400**. Nome/e-mail inválidos
+também retornam **400**; e-mail já usado por outra conta retorna **409**. Sem
+sessão a resposta é **401**; perfil inexistente retorna **404**. Atualizar o
+perfil preserva a senha: depois de alterar o e-mail, o login usa o novo e-mail
+com a mesma senha. Nenhuma credencial aparece na resposta.
+
 ## Goal
 
 A representação JSON de `Goal` reutiliza as conversões compartilhadas de
@@ -810,6 +825,21 @@ todos os filtros informados. Sem nenhum filtro, retorna todas.
 aparecer sozinho. Se os dois vierem e `start_date > end_date`, a resposta é
 **400**. Um valor que não corresponde a nenhum enum, ou uma data inexistente
 (`2026-02-30`), também responde **400** com `code="validation_error"`.
+
+#### `GET /api/tasks/conflicts?date=YYYY-MM-DD` (P-41)
+
+Retorna **200** com os pares de tarefas em conflito no dia pedido:
+
+```json
+{ "conflicts": [{ "first_task_id": 12, "second_task_id": 19 }] }
+```
+
+Reutiliza `TaskConflictService` (P-24), sem duplicar a regra no frontend.
+Considera apenas tarefas do usuário autenticado e da data pedida; ignora
+canceladas/adiadas e não considera intervalos adjacentes como sobreposição.
+Cada par aparece uma vez. Lembretes não fazem parte dessa regra. Ausência ou
+formato inválido de `date` retorna **400**; sem sessão, **401**. Um dia sem
+conflitos retorna `{ "conflicts": [] }`. A visão semanal consulta os sete dias.
 
 #### `POST /api/tasks`
 

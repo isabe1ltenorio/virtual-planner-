@@ -1,197 +1,147 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-  isWithinInterval,
-  parseISO,
-} from "date-fns";
+import { useCallback, useState } from "react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
-import type { Task, Goal } from "../types/domain";
-import { calculateReportStats } from "../utils/reportCalculator";
-import { Card, LoadingState, PageHeader, StatCard } from "../components/ui";
-
-type Period = "week" | "month" | "year";
-
-const PERIOD_LABEL: Record<Period, string> = {
-  week: "Semana",
-  month: "Mês",
-  year: "Ano",
-};
+import type { GoalPeriodFilter } from "../lib/api/goalsApi";
+import { useApiResource } from "../hooks/useApiResource";
+import { formatDateForInput, formatRatio } from "../lib/formatters";
+import {
+  Card,
+  ErrorState,
+  Field,
+  LoadingState,
+  PageHeader,
+  Select,
+  StatCard,
+} from "../components/ui";
+import { ReportRanking } from "../components/ReportRanking";
 
 function ProgressRow({
   label,
-  value,
+  ratio,
   detail,
-  color,
 }: {
   label: string;
-  value: number;
+  ratio: number | null;
   detail: string;
-  color: string;
 }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-center justify-between text-sm">
+      <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
         <span className="font-medium text-muted">{label}</span>
-        <span className="stat-value font-semibold text-ink">{value}%</span>
+        <span className="font-semibold tabular-nums text-ink">
+          {formatRatio(ratio)}
+        </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-        <div
-          className="h-full rounded-full transition-[width] duration-700"
-          style={{ width: `${value}%`, background: color }}
-        />
-      </div>
+      {ratio !== null && (
+        <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full bg-brand-600"
+            style={{ width: `${ratio * 100}%` }}
+          />
+        </div>
+      )}
       <p className="mt-1 text-xs text-subtle">{detail}</p>
     </div>
   );
 }
 
 export function ReportsPage() {
-  const [period, setPeriod] = useState<Period>("week");
-  const [isLoading, setIsLoading] = useState(true);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      setIsLoading(true);
-      try {
-        const [t, g] = await Promise.all([
-          virtualPlannerApi.getTasks(),
-          virtualPlannerApi.getGoals(),
-        ]);
-        if (alive) {
-          setTasks(t);
-          setGoals(g);
-        }
-      } catch (error) {
-        console.error("Erro ao carregar o relatório:", error);
-      } finally {
-        if (alive) setIsLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const { filteredTasks, filteredGoals } = useMemo(() => {
-    const today = new Date();
-    const range = {
-      week: {
-        start: startOfWeek(today, { weekStartsOn: 1 }),
-        end: endOfWeek(today, { weekStartsOn: 1 }),
-      },
-      month: { start: startOfMonth(today), end: endOfMonth(today) },
-      year: { start: startOfYear(today), end: endOfYear(today) },
-    }[period];
-
-    const periodByFilter = { week: "Weekly", month: "Monthly", year: "Yearly" }[
-      period
-    ];
-
-    return {
-      filteredTasks: tasks.filter(
-        (t) => t.date && isWithinInterval(parseISO(t.date), range),
-      ),
-      filteredGoals: goals.filter((g) => g.period === periodByFilter),
-    };
-  }, [tasks, goals, period]);
-
-  const stats = useMemo(
-    () => calculateReportStats(filteredTasks, filteredGoals),
-    [filteredTasks, filteredGoals],
+  const [period, setPeriod] = useState<GoalPeriodFilter>("weekly");
+  const [date, setDate] = useState(formatDateForInput());
+  const load = useCallback(
+    () => virtualPlannerApi.getReport(period, date),
+    [period, date],
   );
-
+  const resource = useApiResource(load);
+  const report = resource.data;
   return (
     <>
       <PageHeader
         title="Relatórios"
-        subtitle={`Produtividade por ${PERIOD_LABEL[period].toLowerCase()}.`}
-        actions={
-          <div className="inline-flex rounded-lg border border-border-c bg-surface p-0.5">
-            {(Object.keys(PERIOD_LABEL) as Period[]).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  period === p
-                    ? "bg-brand-600 text-white"
-                    : "text-muted hover:text-ink"
-                }`}
-              >
-                {PERIOD_LABEL[p]}
-              </button>
-            ))}
-          </div>
-        }
+        subtitle="Métricas calculadas pelo servidor para o período selecionado."
       />
-
-      {isLoading ? (
-        <LoadingState label="Calculando métricas…" />
+      <Card className="grid gap-4 p-4 sm:grid-cols-2">
+        <Field label="Período">
+          <Select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as GoalPeriodFilter)}
+          >
+            <option value="weekly">Semanal</option>
+            <option value="monthly">Mensal</option>
+            <option value="yearly">Anual</option>
+          </Select>
+        </Field>
+        <Field label="Data de referência">
+          <input
+            type="date"
+            className="input"
+            required
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </Field>
+      </Card>
+      {resource.isLoading ? (
+        <LoadingState label="Carregando relatório…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card className="space-y-6 p-6">
-            <h2 className="text-sm font-semibold text-ink">
-              Taxa de conclusão
-            </h2>
-            <ProgressRow
-              label="Metas cumpridas"
-              value={stats.goals.percentage}
-              detail={`${stats.goals.completed} cumpridas + ${stats.goals.partial} parciais de ${stats.goals.total}`}
-              color="#9333ea"
-            />
-            <ProgressRow
-              label="Tarefas executadas"
-              value={stats.tasks.percentage}
-              detail={`${stats.tasks.executed} executadas + ${stats.tasks.partial} parciais de ${stats.tasks.total}`}
-              color="#10b981"
-            />
-          </Card>
-
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard
-              label="Turno mais produtivo"
-              value={stats.bestShift}
-            />
-            <StatCard label="Dia mais produtivo" value={stats.bestPeriod} />
-            <StatCard
-              label="Top categoria — tarefas"
-              value={stats.topTaskCategory}
-            />
-            <StatCard
-              label="Top categoria — metas"
-              value={stats.topGoalCategory}
-            />
-          </div>
-
-          {stats.tasks.total > 0 && stats.bestShift !== "—" && (
-            <Card className="p-5 lg:col-span-2">
-              <p className="text-sm text-muted">
-                Você rende mais{" "}
-                <span className="font-semibold text-ink">
-                  {stats.bestShift.toLowerCase() === "manhã"
-                    ? "de manhã"
-                    : stats.bestShift.toLowerCase() === "tarde"
-                      ? "à tarde"
-                      : "à noite"}
-                </span>
-                . Tente reservar esse turno para as tarefas de maior
-                prioridade — e concentre os lembretes de{" "}
-                <span className="font-semibold text-ink">
-                  {stats.topTaskCategory}
-                </span>{" "}
-                nos horários em que costuma executá-las.
-              </p>
+        report && (
+          <>
+            <p className="text-sm text-muted">
+              De{" "}
+              {new Date(`${report.start_date}T00:00:00`).toLocaleDateString(
+                "pt-BR",
+              )}{" "}
+              a{" "}
+              {new Date(`${report.end_date}T00:00:00`).toLocaleDateString(
+                "pt-BR",
+              )}
+              .
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatCard
+                label="Índice de produtividade"
+                value={formatRatio(report.productivity_index)}
+              />
+              <StatCard label="Tarefas no período" value={report.tasks_total} />
+              <StatCard label="Metas no período" value={report.goals_total} />
+            </div>
+            <Card className="grid gap-6 p-6 sm:grid-cols-2">
+              <ProgressRow
+                label="Metas cumpridas"
+                ratio={report.goals_ratio}
+                detail={`${report.goals_completed} cumpridas e ${report.goals_partially_completed} parciais de ${report.goals_total}`}
+              />
+              <ProgressRow
+                label="Tarefas executadas"
+                ratio={report.tasks_ratio}
+                detail={`${report.tasks_executed} executadas e ${report.tasks_partially_executed} parciais de ${report.tasks_total}`}
+              />
             </Card>
-          )}
-        </div>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <ReportRanking
+                title="Semanas mais produtivas"
+                entries={report.most_productive_weeks}
+              />
+              <ReportRanking
+                title="Meses mais produtivos"
+                entries={report.most_productive_months}
+              />
+              <ReportRanking
+                title="Turnos mais produtivos"
+                entries={report.most_productive_shifts}
+              />
+              <ReportRanking
+                title="Categorias — tarefas"
+                entries={report.task_categories}
+              />
+              <ReportRanking
+                title="Categorias — metas"
+                entries={report.goal_categories}
+              />
+            </div>
+          </>
+        )
       )}
     </>
   );

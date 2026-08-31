@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "virtual_planner/persistence/user_repository.hpp"
+#include "virtual_planner/shared/errors.hpp"
 
 namespace virtual_planner::persistence {
 
@@ -36,7 +37,7 @@ public:
         {
             if (current.id() != user.id() && current.email() == user.email())
             {
-                throw std::invalid_argument("User email is already registered.");
+                throw shared::ConflictError("User email is already registered.");
             }
         }
 
@@ -92,7 +93,7 @@ public:
         {
             if (current.email == user.email())
             {
-                throw std::invalid_argument("User email is already registered.");
+                throw shared::ConflictError("User email is already registered.");
             }
         }
 

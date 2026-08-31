@@ -22,7 +22,7 @@ namespace virtual_planner::persistence
     void shutdown();
 
     [[nodiscard]] DatabaseState state() const noexcept;
-    [[nodiscard]] bool is_connected() const noexcept;
+    [[nodiscard]] virtual bool is_connected() const noexcept;
 
   protected:
     virtual void on_initialize();

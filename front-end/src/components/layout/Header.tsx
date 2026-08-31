@@ -24,10 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
   settings: "Configurações",
 };
 
-const THEME_META: Record<
-  ThemeMode,
-  { label: string; icon: typeof Sun }
-> = {
+const THEME_META: Record<ThemeMode, { label: string; icon: typeof Sun }> = {
   light: { label: "Claro", icon: Sun },
   dark: { label: "Escuro", icon: Moon },
   system: { label: "Sistema", icon: Monitor },
@@ -72,7 +69,9 @@ export const Header: FC<HeaderProps> = ({
               className="btn btn-outline"
             >
               <ActiveIcon size={16} strokeWidth={2} />
-              <span className="hidden sm:inline">{THEME_META[theme].label}</span>
+              <span className="hidden sm:inline">
+                {THEME_META[theme].label}
+              </span>
               <ChevronDown size={14} strokeWidth={2} />
             </button>
 

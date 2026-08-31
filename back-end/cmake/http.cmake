@@ -39,6 +39,7 @@ if(VIRTUAL_PLANNER_WITH_HTTP)
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/reminder_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/goal_routes.cpp
     ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/task_routes.cpp
+    ${VIRTUAL_PLANNER_SOURCE_DIR}/api/http/routes/user_routes.cpp
   )
 
   target_link_libraries(virtual_planner_http

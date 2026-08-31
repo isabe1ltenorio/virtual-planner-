@@ -1,55 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { startOfMonth, startOfWeek } from "date-fns";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  CheckCircle2,
-  Clock,
-  Target,
-  Bell,
-  Plus,
-  AlertTriangle,
-} from "lucide-react";
+import { CheckCircle2, Clock, Target, Plus, AlertTriangle } from "lucide-react";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
-import type { ReminderOccurrence } from "../lib/api/remindersApi";
-import type { Category, Task, Goal, TaskStatus } from "../types/domain";
+import { useApiResource } from "../hooks/useApiResource";
+import type { TaskStatus } from "../types/domain";
 import {
   formatDateForInput,
   formatDateShort,
   formatMinutesToTime,
+  formatRatio,
   CATEGORY_COLORS,
   CATEGORY_LABELS,
-  TASK_STATUS_LABELS,
-  TASK_STATUS_COLORS,
   REMINDER_TYPE_LABELS,
 } from "../lib/formatters";
-import { Card, LoadingState, PageHeader, StatCard } from "../components/ui";
+import {
+  Card,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  StatCard,
+} from "../components/ui";
 import { MiniCalendar } from "../components/MiniCalendar";
 import { DayTimeline } from "../components/DayTimeline";
 import { StatusMenu } from "../components/StatusMenu";
+import { ReportRanking } from "../components/ReportRanking";
 import { buttonClass } from "../components/buttonStyles";
-
-const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
-const STATUSES = Object.keys(TASK_STATUS_LABELS) as TaskStatus[];
-type RangeDays = 14 | 30;
-
-// Neutros que funcionam nos dois temas (slate-400 com alfa na grade).
-const CHART_GRID = "rgba(148,163,184,0.25)";
-const CHART_AXIS = "#94a3b8";
 
 function addDays(base: Date, n: number): Date {
   const d = new Date(base);
@@ -58,73 +34,76 @@ function addDays(base: Date, n: number): Date {
 }
 
 export function DashboardPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [occurrences, setOccurrences] = useState<ReminderOccurrence[]>([]);
-  const [calendarOccurrences, setCalendarOccurrences] = useState<ReminderOccurrence[]>([]);
-  const [calendarMonth, setCalendarMonth] = useState(() => formatDateForInput().slice(0, 7));
-  const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<number>>(() => new Set());
-  const [isLoading, setIsLoading] = useState(true);
+  const [calendarMonth, setCalendarMonth] = useState(() =>
+    formatDateForInput().slice(0, 7),
+  );
+  const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [mutationError, setMutationError] = useState<string>();
   const [selectedDate, setSelectedDate] = useState(formatDateForInput());
-  const [range, setRange] = useState<RangeDays>(14);
 
   const navigate = useNavigate();
   const today = formatDateForInput();
 
-  useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      const [t, g, r] = await Promise.allSettled([
-        virtualPlannerApi.getTasks(),
-        virtualPlannerApi.getGoals(),
-        virtualPlannerApi.getReminderOccurrences(),
-      ]);
-      if (t.status === "fulfilled") setTasks(t.value);
-      if (g.status === "fulfilled") setGoals(g.value);
-      if (r.status === "fulfilled") setOccurrences(r.value);
-      if (t.status === "rejected") console.error("tarefas:", t.reason);
-      if (g.status === "rejected") console.error("metas:", g.reason);
-      if (r.status === "rejected") console.error("lembretes:", r.reason);
-      setIsLoading(false);
-    })();
-  }, []);
+  const dashboard = useApiResource(virtualPlannerApi.getDashboard);
+  const report = dashboard.data;
+  const loadOverview = useCallback(async () => {
+    const [tasks, goals, occurrences] = await Promise.all([
+      virtualPlannerApi.getTasks(),
+      virtualPlannerApi.getGoals({ period: "yearly", date: today }),
+      virtualPlannerApi.getReminderOccurrences({
+        start: today,
+        end: formatDateForInput(addDays(new Date(`${today}T00:00:00`), 7)),
+      }),
+    ]);
+    return { tasks, goals, occurrences };
+  }, [today]);
+  const overview = useApiResource(loadOverview);
+  const tasks = overview.data?.tasks;
+  const goals = overview.data?.goals;
+  const occurrences = overview.data?.occurrences;
 
-  useEffect(() => {
-    let cancelled = false;
-    const start = startOfWeek(startOfMonth(new Date(`${calendarMonth}-01T00:00:00`)));
+  const loadCalendar = useCallback(async () => {
+    const start = startOfWeek(
+      startOfMonth(new Date(`${calendarMonth}-01T00:00:00`)),
+    );
     const startDate = formatDateForInput(start);
     const endDate = formatDateForInput(addDays(start, 41));
-    const requests = [virtualPlannerApi.getReminderOccurrences({
-      start: startDate,
-      end: endDate,
-    })];
+    const requests = [
+      virtualPlannerApi.getReminderOccurrences({
+        start: startDate,
+        end: endDate,
+      }),
+    ];
     // Navegar pelo calendário não troca o dia selecionado na agenda.
     if (selectedDate < startDate || selectedDate > endDate) {
-      requests.push(virtualPlannerApi.getReminderOccurrences({
-        start: selectedDate,
-        end: selectedDate,
-      }));
+      requests.push(
+        virtualPlannerApi.getReminderOccurrences({
+          start: selectedDate,
+          end: selectedDate,
+        }),
+      );
     }
-    Promise.all(requests).then((items) => {
-      if (!cancelled) setCalendarOccurrences(items.flat());
-    }).catch((error) => console.error("lembretes do calendário:", error));
-    return () => { cancelled = true; };
+    return (await Promise.all(requests)).flat();
   }, [calendarMonth, selectedDate]);
+  const calendar = useApiResource(loadCalendar);
+  const calendarOccurrences = calendar.data;
 
   async function handleStatus(id: number, next: TaskStatus) {
     if (updatingTaskIds.has(id)) return;
-    const previous = tasks.find((task) => task.id === id)?.status;
+    setMutationError(undefined);
     setUpdatingTaskIds((prev) => new Set(prev).add(id));
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: next } : t)),
-    );
     try {
       await virtualPlannerApi.updateTask(id, { status: next });
+      overview.retry();
+      dashboard.retry();
     } catch (error) {
-      console.error("Erro ao mudar status:", error);
-      setTasks((prev) => prev.map((task) =>
-        task.id === id && previous !== undefined ? { ...task, status: previous } : task,
-      ));
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar a tarefa.",
+      );
     } finally {
       setUpdatingTaskIds((prev) => {
         const pending = new Set(prev);
@@ -142,34 +121,24 @@ export function DashboardPage() {
 
   const dayTasks = useMemo(
     () =>
-      tasks
+      (tasks ?? [])
         .filter((t) => t.date === selectedDate)
         .sort((a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0)),
     [tasks, selectedDate],
   );
   const dayReminders = useMemo(
-    () => calendarOccurrences.filter((o) => o.date === selectedDate),
+    () => (calendarOccurrences ?? []).filter((o) => o.date === selectedDate),
     [calendarOccurrences, selectedDate],
   );
 
-  const inProgressGoals = goals.filter((g) => g.status === "In Progress");
-
-  const executed = dayTasks.filter((t) => t.status === "Executed").length;
-  const partial = dayTasks.filter(
-    (t) => t.status === "PartiallyExecuted",
-  ).length;
-  const pending = dayTasks.filter((t) => t.status === "Pending").length;
-  const productivity =
-    dayTasks.length > 0
-      ? Math.round(((executed + partial * 0.5) / dayTasks.length) * 100)
-      : 0;
-  // Dia futuro ou sem tarefas: não há o que medir, mostra "—" em vez de 0%.
-  const productivityKnown = dayTasks.length > 0 && selectedDate <= today;
+  const inProgressGoals = (goals ?? []).filter(
+    (g) => g.status === "In Progress",
+  );
 
   // Pendentes/adiadas de dias passados: some do "hoje" mas continuam devendo.
   const overdue = useMemo(
     () =>
-      tasks
+      (tasks ?? [])
         .filter(
           (t) =>
             t.date < today &&
@@ -181,49 +150,11 @@ export function DashboardPage() {
 
   const marked = useMemo(() => {
     const set = new Set<string>();
-    tasks.forEach((t) => set.add(t.date));
-    occurrences.forEach((o) => set.add(o.date));
-    calendarOccurrences.forEach((o) => set.add(o.date));
+    tasks?.forEach((t) => set.add(t.date));
+    occurrences?.forEach((o) => set.add(o.date));
+    calendarOccurrences?.forEach((o) => set.add(o.date));
     return set;
   }, [tasks, occurrences, calendarOccurrences]);
-
-  const statusData = useMemo(
-    () =>
-      STATUSES.map((s) => ({
-        name: TASK_STATUS_LABELS[s],
-        value: tasks.filter((t) => t.status === s).length,
-        fill: TASK_STATUS_COLORS[s],
-      })).filter((d) => d.value > 0),
-    [tasks],
-  );
-
-  const execData = useMemo(() => {
-    const start = addDays(new Date(`${today}T00:00:00`), -(range - 1));
-    return Array.from({ length: range }, (_, i) => {
-      const d = addDays(start, i);
-      const key = formatDateForInput(d);
-      return {
-        label: d.toLocaleDateString("pt-BR", {
-          day: "2-digit",
-          month: "2-digit",
-        }),
-        executadas: tasks.filter(
-          (t) => t.date === key && t.status === "Executed",
-        ).length,
-      };
-    });
-  }, [tasks, range, today]);
-
-  const categoryData = useMemo(
-    () =>
-      CATEGORIES.map((c) => ({
-        name: CATEGORY_LABELS[c],
-        fill: CATEGORY_COLORS[c],
-        tarefas: tasks.filter((t) => t.category === c).length,
-        metas: goals.filter((g) => g.category === c).length,
-      })).filter((d) => d.tarefas > 0 || d.metas > 0),
-    [tasks, goals],
-  );
 
   const upcoming = useMemo(() => {
     const horizon = formatDateForInput(
@@ -239,7 +170,7 @@ export function DashboardPage() {
     };
     const items: Item[] = [];
 
-    tasks
+    (tasks ?? [])
       .filter((t) => t.date >= today && t.date <= horizon)
       .forEach((t) =>
         items.push({
@@ -252,7 +183,7 @@ export function DashboardPage() {
         }),
       );
 
-    occurrences
+    (occurrences ?? [])
       .filter((o) => o.date >= today && o.date <= horizon)
       .forEach((o) =>
         items.push({
@@ -261,7 +192,7 @@ export function DashboardPage() {
           minutes: o.reminder.startMinutes,
           title: o.reminder.description,
           tag: REMINDER_TYPE_LABELS[o.reminder.type],
-          color: "#9333ea",
+          color: CATEGORY_COLORS[o.reminder.category],
         }),
       );
 
@@ -272,10 +203,8 @@ export function DashboardPage() {
       .slice(0, 8);
   }, [tasks, occurrences, today]);
 
-  if (isLoading) return <LoadingState label="Carregando seu dia…" />;
-
   const isEmpty =
-    tasks.length === 0 && goals.length === 0 && occurrences.length === 0;
+    tasks?.length === 0 && goals?.length === 0 && occurrences?.length === 0;
 
   return (
     <>
@@ -294,14 +223,19 @@ export function DashboardPage() {
         }
       />
 
+      {overview.error && (
+        <ErrorState message={overview.error} onRetry={overview.retry} />
+      )}
+      {mutationError && <ErrorState message={mutationError} />}
+
       {isEmpty && (
         <Card className="p-6 text-center">
           <p className="text-sm font-medium text-ink">
-            Tudo pronto para começar.
+            Nada agendado para os próximos dias.
           </p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-            Crie sua primeira <strong>meta</strong> ou <strong>tarefa</strong> e
-            o resumo do dia começa a ganhar forma.
+            Use os atalhos para incluir uma <strong>meta</strong> ou{" "}
+            <strong>tarefa</strong>.
           </p>
           <div className="mt-4 flex justify-center gap-2">
             <Link to="/tasks/new" className={buttonClass("primary")}>
@@ -315,28 +249,94 @@ export function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label="Pendentes"
-          value={pending}
-          icon={<Clock size={16} />}
-        />
-        <StatCard
-          label="Executadas"
-          value={executed}
-          icon={<CheckCircle2 size={16} />}
-        />
-        <StatCard
-          label="Metas em andamento"
-          value={inProgressGoals.length}
-          icon={<Target size={16} />}
-        />
-        <StatCard
-          label={`Lembretes ${dayLabel === "hoje" ? "hoje" : "no dia"}`}
-          value={dayReminders.length}
-          icon={<Bell size={16} />}
-        />
-      </div>
+      <section
+        aria-labelledby="dashboard-metrics-heading"
+        className="space-y-4"
+      >
+        <h2
+          id="dashboard-metrics-heading"
+          className="text-sm font-semibold text-ink"
+        >
+          Indicadores de hoje
+        </h2>
+        {dashboard.isLoading ? (
+          <LoadingState label="Carregando indicadores…" />
+        ) : dashboard.error ? (
+          <ErrorState message={dashboard.error} onRetry={dashboard.retry} />
+        ) : (
+          report && (
+            <>
+              <p className="text-xs text-muted">
+                {formatDateShort(report.start_date)} · Dia civil do servidor. O
+                calendário altera somente a agenda.
+              </p>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <StatCard
+                  label="Tarefas de hoje"
+                  value={report.tasks_total}
+                  icon={<Clock size={16} />}
+                />
+                <StatCard
+                  label="Executadas hoje"
+                  value={report.tasks_executed}
+                  icon={<CheckCircle2 size={16} />}
+                  hint={`${report.tasks_partially_executed} parcialmente executadas`}
+                />
+                <StatCard
+                  label="Metas de hoje"
+                  value={report.goals_total}
+                  icon={<Target size={16} />}
+                />
+                <StatCard
+                  label="Metas cumpridas hoje"
+                  value={report.goals_completed}
+                  icon={<CheckCircle2 size={16} />}
+                  hint={`${report.goals_partially_completed} parcialmente cumpridas`}
+                />
+              </div>
+              <Card className="p-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted">
+                    Índice de produtividade de hoje
+                  </span>
+                  <span className="stat-value text-lg font-semibold text-ink">
+                    {formatRatio(report.productivity_index)}
+                  </span>
+                </div>
+                {report.productivity_index !== null && (
+                  <div
+                    className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
+                      style={{ width: `${report.productivity_index * 100}%` }}
+                    />
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted">
+                  Tarefas: {formatRatio(report.tasks_ratio)} · Metas:{" "}
+                  {formatRatio(report.goals_ratio)}
+                </p>
+              </Card>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                <ReportRanking
+                  title="Categorias de tarefas — hoje"
+                  entries={report.task_categories}
+                />
+                <ReportRanking
+                  title="Categorias de metas — hoje"
+                  entries={report.goal_categories}
+                />
+                <ReportRanking
+                  title="Turnos mais produtivos — hoje"
+                  entries={report.most_productive_shifts}
+                />
+              </div>
+            </>
+          )
+        )}
+      </section>
 
       {overdue.length > 0 && (
         <Card className="border-amber-300 p-5 dark:border-amber-500/40">
@@ -364,7 +364,8 @@ export function DashboardPage() {
                     {task.description}
                   </Link>
                   <p className="text-xs text-muted">
-                    {formatDateShort(task.date)} · {CATEGORY_LABELS[task.category]}
+                    {formatDateShort(task.date)} ·{" "}
+                    {CATEGORY_LABELS[task.category]}
                   </p>
                 </div>
                 <StatusMenu
@@ -383,150 +384,6 @@ export function DashboardPage() {
         </Card>
       )}
 
-      <Card className="p-5">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-muted">
-            Produtividade de {dayLabel}
-          </span>
-          <span className="stat-value text-lg font-semibold text-ink">
-            {productivityKnown ? `${productivity}%` : "—"}
-          </span>
-        </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
-            style={{ width: `${productivityKnown ? productivity : 0}%` }}
-          />
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-        <Card className="p-5">
-          <h2 className="mb-3 text-sm font-semibold text-ink">
-            Tarefas por status
-          </h2>
-          {statusData.length === 0 ? (
-            <p className="py-10 text-center text-sm text-subtle">
-              Sem tarefas ainda.
-            </p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={52}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  stroke="none"
-                >
-                  {statusData.map((d) => (
-                    <Cell key={d.name} fill={d.fill} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
-
-        <Card className="p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">Execução</h2>
-            <div className="inline-flex rounded-lg border border-border-c bg-surface p-0.5">
-              {([14, 30] as RangeDays[]).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRange(r)}
-                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                    range === r
-                      ? "bg-brand-600 text-white"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  {r}d
-                </button>
-              ))}
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={execData} margin={{ left: -20, right: 8, top: 4 }}>
-              <defs>
-                <linearGradient id="exec" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#9333ea" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#9333ea" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke={CHART_GRID} vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: CHART_AXIS }}
-                interval="preserveStartEnd"
-                minTickGap={24}
-                axisLine={{ stroke: CHART_GRID }}
-                tickLine={false}
-              />
-              <YAxis
-                allowDecimals={false}
-                tick={{ fontSize: 11, fill: CHART_AXIS }}
-                axisLine={false}
-                tickLine={false}
-                width={28}
-              />
-              <Tooltip />
-              <Area
-                type="monotone"
-                dataKey="executadas"
-                stroke="#9333ea"
-                strokeWidth={2}
-                fill="url(#exec)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Card>
-
-        <Card className="p-5">
-          <h2 className="mb-3 text-sm font-semibold text-ink">Por categoria</h2>
-          {categoryData.length === 0 ? (
-            <p className="py-10 text-center text-sm text-subtle">
-              Sem tarefas nem metas ainda.
-            </p>
-          ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={categoryData}
-                layout="vertical"
-                margin={{ left: 4, right: 12 }}
-              >
-                <CartesianGrid stroke={CHART_GRID} horizontal={false} />
-                <XAxis
-                  type="number"
-                  allowDecimals={false}
-                  tick={{ fontSize: 11, fill: CHART_AXIS }}
-                  axisLine={{ stroke: CHART_GRID }}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={78}
-                  tick={{ fontSize: 10, fill: CHART_AXIS }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="tarefas" radius={[0, 4, 4, 0]} fill="#9333ea" />
-                <Bar dataKey="metas" radius={[0, 4, 4, 0]} fill="#c084fc" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </Card>
-      </div>
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Agenda do dia */}
         <div className="lg:col-span-2">
@@ -542,14 +399,30 @@ export function DashboardPage() {
                 + agendar
               </Link>
             </div>
-            <DayTimeline
-              tasks={dayTasks}
-              updatingTaskIds={updatingTaskIds}
-              onStatusChange={handleStatus}
-              onEmptyClick={(minutes) =>
-                navigate(`/tasks/new?date=${selectedDate}&start=${minutes}`)
-              }
-            />
+            {overview.isLoading || calendar.isLoading ? (
+              <LoadingState label="Carregando agenda…" />
+            ) : calendar.error ? (
+              <ErrorState message={calendar.error} onRetry={calendar.retry} />
+            ) : (
+              !overview.error && (
+                <>
+                  <p className="mb-3 text-xs text-muted">
+                    {dayTasks.length} tarefas · {dayReminders.length} lembretes
+                  </p>
+                  <DayTimeline
+                    tasks={dayTasks}
+                    occurrences={dayReminders}
+                    updatingTaskIds={updatingTaskIds}
+                    onStatusChange={handleStatus}
+                    onEmptyClick={(minutes) =>
+                      navigate(
+                        `/tasks/new?date=${selectedDate}&start=${minutes}`,
+                      )
+                    }
+                  />
+                </>
+              )
+            )}
 
             {dayReminders.length > 0 && (
               <div className="mt-4 border-t border-border-c pt-3">
@@ -568,7 +441,12 @@ export function DashboardPage() {
                         key={`${o.reminder.id}-${o.date}`}
                         className="flex items-center gap-2 text-sm"
                       >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{
+                            background: CATEGORY_COLORS[o.reminder.category],
+                          }}
+                        />
                         <span className="tabular-nums text-xs text-muted">
                           {formatMinutesToTime(o.reminder.startMinutes)}
                         </span>
@@ -599,7 +477,13 @@ export function DashboardPage() {
 
           <Card className="p-5">
             <h2 className="mb-3 text-sm font-semibold text-ink">Próximos</h2>
-            {upcoming.length === 0 ? (
+            {overview.isLoading ? (
+              <p className="text-sm text-muted">Carregando próximos itens…</p>
+            ) : overview.error ? (
+              <p className="text-sm text-muted">
+                Os próximos itens não puderam ser carregados.
+              </p>
+            ) : upcoming.length === 0 ? (
               <p className="text-sm text-subtle">Nada nos próximos 7 dias.</p>
             ) : (
               <ul className="space-y-3">
@@ -631,7 +515,13 @@ export function DashboardPage() {
             <h2 className="mb-3 text-sm font-semibold text-ink">
               Metas em andamento
             </h2>
-            {inProgressGoals.length === 0 ? (
+            {overview.isLoading ? (
+              <p className="text-sm text-muted">Carregando metas…</p>
+            ) : overview.error ? (
+              <p className="text-sm text-muted">
+                As metas não puderam ser carregadas.
+              </p>
+            ) : inProgressGoals.length === 0 ? (
               <p className="text-sm text-subtle">Nenhuma meta ativa.</p>
             ) : (
               <ul className="space-y-2">

@@ -2,42 +2,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ------------------------------------------------------------------ *
- *  Tipografia — Gilroy                                              *
- *  Coloque os arquivos em front-end/public/fonts/:                  *
- *    Gilroy-Regular.woff2  Gilroy-Medium.woff2                      *
- *    Gilroy-SemiBold.woff2 Gilroy-Bold.woff2                        *
- *  Sem eles, cai no fallback (Plus Jakarta Sans / Inter / system).  *
- * ------------------------------------------------------------------ */
-@font-face {
-  font-family: "Gilroy";
-  src: url("/fonts/Gilroy-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Gilroy";
-  src: url("/fonts/Gilroy-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Gilroy";
-  src: url("/fonts/Gilroy-SemiBold.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Gilroy";
-  src: url("/fonts/Gilroy-Bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
+/* Tipografia local: Plus Jakarta Sans, incluída no bundle. */
 /* ------------------------------------------------------------------ *
  *  Tokens de tema                                                   *
  * ------------------------------------------------------------------ */
@@ -81,8 +46,9 @@
 }
 
 @theme inline {
-  --font-sans: "Gilroy", "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui,
-    -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans:
+    "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
 
   /* Marca — escala purple do Tailwind, ancorada em #9333ea */
   --color-brand-50: #faf5ff;

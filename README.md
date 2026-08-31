@@ -2,7 +2,7 @@
 
 Virtual Planner é um projeto acadêmico desenvolvido em C++20 para ajudar no planejamento pessoal.
 
-O domínio cobre usuários, tarefas, metas e lembretes. Sobre ele já existem casos de uso de Goal e Reminder, um serviço de relatórios, uma API HTTP que serve o CRUD de metas mais relatórios e dashboard, e adapters PostgreSQL para Goal e Reminder. O front-end em React já consome a API nas telas de metas, com tela de login; tarefas e lembretes seguem em mocks, porque ainda não há endpoints para eles.
+O domínio cobre usuários, tarefas, metas e lembretes. A API HTTP oferece autenticação por sessão, perfil, CRUD de tarefas/metas/lembretes, conflitos de agenda e relatórios. O frontend React consome a API real; PostgreSQL persiste contas e dados quando habilitado. Sem banco, os repositórios são mantidos em memória.
 
 O build padrão continua sem rede e sem banco: HTTP, JSON, PostgreSQL e cobertura são opções desligadas por padrão.
 
@@ -114,6 +114,8 @@ Endpoints disponíveis hoje:
 | `POST /api/auth/login` | devolve o cookie `vp_session` |
 | `POST /api/auth/logout` | invalida a sessão |
 | `GET /api/auth/me` | quem está logado |
+| `GET/PATCH /api/users/me` | consulta e edição do próprio perfil |
+| `GET /api/tasks/conflicts?date=` | pares de tarefas com sobreposição no dia |
 | `GET /api/goals?period=&date=` | lista metas do período civil (`weekly`, `monthly` ou `yearly`) |
 | `GET /api/goals/:id` | busca uma meta |
 | `POST /api/goals` | cria uma meta |
@@ -125,7 +127,7 @@ Endpoints disponíveis hoje:
 
 Erro de domínio vira status HTTP num mapeamento único: `400` para validação, `404` para não encontrado, `409` para conflito e `500` genérico, sem vazar a mensagem interna. O contrato completo, com CORS e log, está em [docs/api.md](docs/api.md).
 
-Os endpoints de Task, Reminder e User ainda não existem.
+Task e Reminder também oferecem CRUD completo; `/api/users/me` permite consultar e editar o perfil. `/api/tasks/conflicts?date=YYYY-MM-DD` fornece os conflitos usados pelo planejamento. Consulte o inventário completo em [docs/api.md](docs/api.md).
 
 > **Toda rota exige sessão**, com três exceções: `GET /api/health` e as duas de
 > `POST /api/auth/{register,login}`. Sem cookie válido a resposta é `401` —
@@ -240,8 +242,8 @@ O script é idempotente (não reaplica migrações já registradas), roda cada m
 
 ## Tutorial: back-end e front-end juntos
 
-Do clone até usar o aplicativo no navegador, com os dados no PostgreSQL. Foi
-executado de verdade nesta ordem — as saídas abaixo são as reais.
+Do clone até usar o aplicativo no navegador, com os dados no PostgreSQL. As
+saídas e identificadores abaixo são exemplos; variam conforme os dados locais.
 
 Há dois caminhos. O primeiro é um comando; o segundo é o do dia a dia, com
 recompilação e hot reload.
@@ -280,7 +282,7 @@ export POSTGRES_HOST=127.0.0.1
 ```
 
 ```
-Concluído: 7 migration(ns) aplicada(s), 0 pulada(s).
+Concluído: N migration(ns) aplicada(s), 0 pulada(s).
 ```
 
 Rodar de novo é seguro: as já aplicadas aparecem como puladas. É este passo que
@@ -363,11 +365,12 @@ por ela**, então outra conta não enxerga esta linha.
 
 | Tela | Origem dos dados |
 | --- | --- |
-| Login, Metas, Relatórios, Dashboard | **API e PostgreSQL** |
-| Tarefas, Lembretes, Perfil | mocks — não existem endpoints para elas |
+| Login, Perfil, Tarefas, Metas, Lembretes | **API e PostgreSQL** |
+| Dashboard, Planejamento, Relatórios | **API**, calculados a partir dos dados do usuário |
+| Configurações | Saúde real da API e do banco |
 
 Detalhes e o que falta para fechar estão em
-[O que falta para funcionar por completo](#o-que-falta-para-funcionar-por-completo).
+[Limites operacionais](#limites-operacionais).
 
 ### Erros comuns
 
@@ -375,14 +378,14 @@ Detalhes e o que falta para fechar estão em
 | --- | --- |
 | Cai no login e volta ao login | senha com menos de 12 caracteres; a mensagem aparece no formulário |
 | Tela "A API não respondeu" | back-end fora do ar, ou em porta diferente de 8080 — ajuste com `VP_API_TARGET` |
-| Metas vazias após reiniciar a API | a conta sumiu junto: `User` só existe em memória. Crie de novo |
+| Retorna ao login após reiniciar a API | sessões ficam em memória; entre novamente com a conta persistida |
 | `"connected": false` no health | banco fora do alcance; confira `POSTGRES_HOST` e o container |
 | `relation "goals" does not exist` | faltou rodar `./scripts/db-migrate.sh` |
 | `ports are not available: 5432` | já há um PostgreSQL na máquina ocupando a porta |
-| Telas com dados que não estão no banco | `VITE_API_URL` comentada: o front está em modo mock |
+| Dados desaparecem após reiniciar | API iniciada sem `VP_USE_POSTGRES=true`, usando repositórios em memória |
 
-Para trabalhar sem back-end nenhum, comente `VITE_API_URL` em
-`front-end/.env.development` — todas as telas voltam aos mocks.
+O frontend precisa da API. `VITE_API_URL` usa `/api` por padrão; não há
+modo de autenticação fictícia nem fallback automático para mocks.
 
 ## Tutorial: consumindo os dados do banco pela API
 
@@ -393,8 +396,7 @@ ou escrever código de back-end.
 Se você quer o aplicativo funcionando, use o
 [tutorial de back-end e front-end juntos](#tutorial-back-end-e-front-end-juntos).
 
-Todos os comandos abaixo foram executados de verdade — as respostas são as
-reais, não ilustrativas.
+As respostas abaixo ilustram o contrato; IDs e contagens dependem do banco.
 
 ### O que persiste, e o que não persiste
 
@@ -404,13 +406,13 @@ Antes de começar, uma ressalva que evita meia hora de confusão:
 | --- | --- |
 | `Goal` | PostgreSQL, tabela `goals` |
 | `Reminder` | PostgreSQL, tabela `reminders` |
-| `Task` | apenas em memória — não há adapter PostgreSQL |
-| `User` e sessões | apenas em memória — não há adapter PostgreSQL |
+| `Task` | PostgreSQL, tabela `tasks` |
+| `User` e credenciais | PostgreSQL, tabela `users` |
+| Sessões | memória do processo; novo login após reinício |
 
-**Reiniciar o processo apaga as contas**, mesmo com `VP_USE_POSTGRES=true`. As
-metas continuam no banco, mas você precisa registrar o usuário de novo — e o
-`user_id` novo pode não bater com o das metas antigas. É limitação conhecida:
-falta o adapter de `User` e a migration da coluna de senha.
+Com `VP_USE_POSTGRES=true`, reiniciar o processo preserva contas e dados.
+A sessão expira no reinício: faça login novamente, sem recriar a conta.
+Sem PostgreSQL habilitado, todos os repositórios são voláteis.
 
 ### 1. Suba o banco
 
@@ -616,7 +618,7 @@ O `404` é deliberado: um `403` diria a Bob que aquele identificador existe.
 | `no matches found` no shell | URL com `?` sem aspas, no `zsh` |
 | `400 validation_error` no registro | senha com menos de 12 caracteres |
 | `relation "goals" does not exist` | faltou rodar `./scripts/db-migrate.sh` |
-| Conta some após reiniciar | esperado: `User` só existe em memória |
+| Conta some após reiniciar | API estava em modo sem banco; habilite PostgreSQL para persistir |
 
 ### Consumindo pelo código, sem HTTP
 
@@ -708,7 +710,7 @@ O teste de integração precisa das variáveis `POSTGRES_DB`, `POSTGRES_USER` e 
 O projeto está dividido em camadas:
 
 - `domain`: entidades e regras do sistema.
-- `application`: casos de uso e serviços. Goal está completo (criar, buscar, atualizar, remover, listar e alterar status), Reminder tem criação, atualização, remoção e listagem com recorrência, e `reporting` calcula as métricas do contrato da P-63. Task ainda não tem casos de uso.
+- `application`: casos de uso de Goal, Task, Reminder e perfil de User; detecção de conflitos, expansão de recorrências e métricas do contrato da P-63.
 - `api`: fronteira HTTP e serialização JSON. Depende das camadas internas, mas nenhuma delas depende de `api` — `httplib` e `nlohmann` só aparecem aqui.
 - `interfaces`: contratos usados pelas diferentes partes do projeto.
 - `persistence`: contratos para banco de dados e repositórios.
@@ -730,7 +732,7 @@ Outros arquivos do diagrama:
 
 - `persistence::Database`: abstração de ciclo de vida de persistência, independente de fornecedor.
 - `persistence::Transaction`: contrato mínimo para `commit()` e `rollback()`.
-- `persistence::*Repository`: contratos de repositório para as entidades de domínio. Todos têm implementação in-memory em `persistence/memory`. `GoalRepository` e `ReminderRepository` já possuem adapter PostgreSQL; `TaskRepository` e `UserRepository` seguem só com in-memory.
+- `persistence::*Repository`: contratos de repositório para as entidades de domínio. Todos têm implementação in-memory em `persistence/memory`. Goal, Task, Reminder e User possuem adapters PostgreSQL.
 - `infrastructure::postgres::PostgresConfig`: configuração externa da conexão PostgreSQL.
 - `infrastructure::postgres::PostgresDatabase`: adapter concreto baseado em `libpqxx`, compilado apenas com `VIRTUAL_PLANNER_WITH_POSTGRES=ON`.
 - `infrastructure::postgres::PostgresTransaction`: transação PostgreSQL com rollback automático no destrutor se não houver `commit()`.
@@ -757,6 +759,8 @@ Também possui tipos auxiliares para datas, horários, categorias, prioridades e
 Documentos adicionais estão disponíveis na pasta `docs/`:
 
 - [`docs/getting-started.md`](docs/getting-started.md): primeiros passos.
+- [`docs/frontend/screens.md`](docs/frontend/screens.md): inventário de telas, rotas e issues.
+- [`docs/release-readiness.md`](docs/release-readiness.md): validação e limites da entrega.
 - [`docs/architecture.md`](docs/architecture.md): decisões de arquitetura.
 - [`docs/conventions.md`](docs/conventions.md): convenções de código, testes e build.
 - [`docs/persistence-architecture.md`](docs/persistence-architecture.md): camada de persistência.
@@ -772,7 +776,7 @@ O planejamento e o estado das tarefas ficam nas issues do GitHub, não neste arq
 
 ## 🖥️ Front-end (Interface do Usuário)
 
-O front-end do Virtual Planner foi construído com **React 19, TypeScript, Vite e Tailwind CSS v4**. As telas de metas consomem a API; tarefas e lembretes ainda leem os mocks de `front-end/src/mocks`, porque não existem endpoints para eles.
+O frontend usa **React 19, TypeScript, Vite e Tailwind CSS v4**. As telas consomem endpoints reais, com sessão, tratamento de falhas e estados de carregamento/vazio.
 
 As rotas ficam em `src/App.tsx`, dentro de um `AppShell` com sidebar e alternância de tema:
 
@@ -804,11 +808,13 @@ npm run dev
 | `npm run dev` | Servidor de desenvolvimento do Vite, com hot reload |
 | `npm run build` | `tsc -b` seguido do build de produção do Vite |
 | `npm run lint` | ESLint sobre todo o workspace |
+| `npm test` | Vitest e Testing Library, sem modo watch |
+| `npm run format:check` | Confere formatação com Prettier |
 | `npm run preview` | Serve localmente o resultado de `npm run build` |
 
 ### Integração contínua
 
-`.github/workflows/frontend.yml` roda em Node 22 a cada push em `main` e a cada pull request que toque `front-end/**`, executando `npm ci`, `npm run build` e `npm run lint`. Rode os três localmente antes de abrir PR: o job falha no primeiro erro de tipo ou de lint.
+`.github/workflows/frontend.yml` roda em Node 22 a cada push em `main` e pull request de frontend: instalação pelo lockfile, build, lint, testes e verificação de formatação. Execute esses mesmos checks localmente.
 
 ### Front-end ligado à API
 
@@ -826,10 +832,8 @@ npm run dev
 ```
 
 A tela de login aparece, você cria a conta ali mesmo e cai no dashboard. As
-telas de **metas** leem e gravam no backend de verdade.
-
-Para trabalhar sem backend, comente `VITE_API_URL` em `.env.development` e tudo
-volta aos mocks.
+telas de **metas, tarefas, lembretes e perfil** leem e gravam no backend.
+A API é necessária mesmo quando `VITE_API_URL` não é definida: o padrão é `/api`.
 
 #### Por que o caminho é relativo, e não a URL do backend
 
@@ -845,42 +849,31 @@ front e backend na mesma origem. Para mudar o alvo do proxy, use
 ```text
 front-end/src
 ├── lib/api
-│   ├── config.ts             # lê VITE_API_URL e decide backend ou mock
+│   ├── config.ts             # lê VITE_API_URL, com padrão /api
 │   ├── httpClient.ts         # fetch com credentials; erro da API vira ApiError
 │   ├── goalsApi.ts           # endpoints de Goal
 │   ├── authApi.ts            # register, login, logout
 │   ├── session.ts            # quem está logado, via GET /api/auth/me
-│   └── virtualPlannerApi.ts  # fachada: roteia Goal, mantém o resto em mock
+│   └── virtualPlannerApi.ts  # fachada tipada para os endpoints reais
 ├── components/RequireSession.tsx   # guarda: sem sessão, manda para /login
 └── pages/LoginPage.tsx             # login e criação de conta
 ```
 
 Não há token em `localStorage` de propósito: a sessão é um cookie `HttpOnly`
-que o JavaScript não lê, e é isso que impede um XSS de roubá-la.
+que o JavaScript não lê. Isso reduz a exposição do cookie, mas não elimina
+os demais impactos de XSS; a publicação exige HTTPS e cuidados de segurança.
 
-### O que falta para funcionar por completo
+### Limites operacionais
 
-O caminho de **metas** funciona ponta a ponta hoje: criar conta, entrar, criar,
-listar, editar, mudar status, excluir e ver relatórios — tudo no PostgreSQL.
-
-O que ainda **não** funciona, e por quê:
-
-| Falta | Bloqueio | Efeito hoje |
-| --- | --- | --- |
-| Telas de **tarefas** lerem o backend | não existem endpoints de `Task` | a tela funciona, mas sobre mocks |
-| Telas de **lembretes** lerem o backend | não existem endpoints de `Reminder` | idem |
-| **Contas sobreviverem a um restart** | não existe `PostgresUserRepository` | ao reiniciar a API, é preciso criar a conta de novo |
-| Tela de **perfil** mostrar dados reais | não existem endpoints de `User` | mocks |
-
-As três primeiras linhas têm a mesma causa: **só `Goal` tem endpoints**. Quando
-`Task` e `Reminder` ganharem os deles, ligar as telas é acrescentar um arquivo
-em `src/lib/api/` e trocar o roteamento em `virtualPlannerApi.ts` — a decisão
-está num lugar só justamente por isso.
-
-A conta que some no restart é a mais incômoda no dia a dia: as metas continuam
-no banco, mas o `user_id` de uma conta nova pode não bater com o das metas
-antigas. Resolve com uma migration da coluna de senha (faixa 050–059) e o
-adapter de `User`.
+- Sessões vivem em memória e exigem novo login após reiniciar a API.
+- Sem PostgreSQL, contas e dados são voláteis.
+- O Compose serve HTTP em loopback para uso local. Publicação na internet
+  exige HTTPS, configuração de produção e credenciais próprias; não exponha
+  as portas diretamente.
+- Notificações de lembretes dependem da permissão do navegador e da aba aberta.
+- A validação de release e os critérios de aceite estão em
+  [docs/release-readiness.md](docs/release-readiness.md). Aprovações nominais
+  de colaboradores não são substituídas por testes automatizados.
 
 ### Estrutura
 
@@ -889,7 +882,7 @@ front-end/src
 ├── components   # componentes reutilizáveis de UI
 ├── pages        # telas, uma por rota
 ├── lib          # helpers sem JSX
-├── mocks        # dados de exemplo enquanto a API não é consumida
+├── mocks        # exemplos legados, fora do fluxo principal
 ├── types        # tipos compartilhados entre telas
 └── assets       # imagens e estáticos
 ```

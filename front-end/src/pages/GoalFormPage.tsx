@@ -1,176 +1,169 @@
-import { useState, useEffect } from "react";
-import type { SubmitEvent } from "react";
-import { useNavigate, useParams, Link } from "react-router";
+import { useCallback, useRef, useState, type FormEvent } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import type { Goal, Category, GoalPeriod, GoalStatus } from "../types/domain";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
+import { useApiResource } from "../hooks/useApiResource";
 import {
   formatDateForInput,
   CATEGORY_LABELS,
   GOAL_PERIOD_LABELS,
   GOAL_STATUS_LABELS,
 } from "../lib/formatters";
-import { Button, Field, FormPage } from "../components/ui";
+import {
+  Button,
+  ErrorState,
+  Field,
+  FormPage,
+  LoadingState,
+  Select,
+} from "../components/ui";
 
 export type GoalFormData = Omit<Goal, "id">;
 
 export function GoalFormPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const isEditing = Boolean(id);
-
-  const [isLoading, setIsLoading] = useState(isEditing);
-  const [formData, setFormData] = useState<GoalFormData>({
-    description: "",
-    category: "Study",
-    status: "In Progress",
-    period: "Monthly",
-    reference_date: formatDateForInput(),
-  });
-
-  useEffect(() => {
-    if (!isEditing || !id) return;
-    virtualPlannerApi
-      .getGoals()
-      .then((goals) => {
-        const found = goals.find((g) => g.id === Number(id));
-        if (found) {
-          setFormData({
-            description: found.description,
-            category: found.category,
-            status: found.status,
-            period: found.period,
-            reference_date: found.reference_date,
-          });
-        }
-      })
-      .catch((err) => console.error("Erro ao carregar meta:", err))
-      .finally(() => setIsLoading(false));
-  }, [id, isEditing]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      if (isEditing && id) {
-        await virtualPlannerApi.updateGoal(Number(id), formData);
-      } else {
-        await virtualPlannerApi.createGoal(formData);
-      }
-      navigate("/goals");
-    } catch (error) {
-      console.error("Erro ao salvar a meta:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  const load = useCallback(
+    () =>
+      id
+        ? virtualPlannerApi.getGoalById(Number(id))
+        : Promise.resolve(undefined),
+    [id],
+  );
+  const resource = useApiResource(load);
   return (
     <FormPage
-      title={isEditing ? "Editar meta" : "Nova meta"}
+      title={id ? "Editar meta" : "Nova meta"}
       backLink={
-        <Link
-          to="/goals"
-          className="text-sm font-medium text-muted hover:text-ink"
-        >
+        <Link to="/goals" className="btn btn-ghost">
           Voltar
         </Link>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {resource.isLoading ? (
+        <LoadingState label="Carregando meta…" />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
+      ) : (
+        <GoalForm key={id ?? "new"} id={id} initial={resource.data} />
+      )}
+    </FormPage>
+  );
+}
+
+function GoalForm({ id, initial }: { id?: string; initial?: Goal }) {
+  const navigate = useNavigate();
+  const submitting = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+  const [form, setForm] = useState<GoalFormData>(() => ({
+    description: initial?.description ?? "",
+    category: initial?.category ?? "Study",
+    status: initial?.status ?? "In Progress",
+    period: initial?.period ?? "Monthly",
+    reference_date: initial?.reference_date ?? formatDateForInput(),
+  }));
+  const set = <K extends keyof GoalFormData>(key: K, value: GoalFormData[K]) =>
+    setForm((previous) => ({ ...previous, [key]: value }));
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (submitting.current) return;
+    if (!form.description.trim()) {
+      setError("Informe a descrição da meta.");
+      return;
+    }
+    submitting.current = true;
+    setSaving(true);
+    setError(undefined);
+    try {
+      if (id) await virtualPlannerApi.updateGoal(Number(id), form);
+      else await virtualPlannerApi.createGoal(form);
+      navigate("/goals");
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Não foi possível salvar a meta.",
+      );
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
+  }
+  return (
+    <form onSubmit={submit}>
+      <fieldset disabled={saving} className="space-y-5">
         <Field label="Descrição">
           <input
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            required
-            disabled={isLoading}
-            placeholder="Ex.: concluir o projeto do semestre"
             className="input"
+            required
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder="Ex.: concluir o projeto do semestre"
           />
         </Field>
-
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Field label="Categoria">
-            <select
-              name="category"
-              value={formData.category}
-              onChange={handleChange}
-              disabled={isLoading}
-              className="select"
+            <Select
+              value={form.category}
+              onChange={(e) => set("category", e.target.value as Category)}
             >
-              {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-                <option key={c} value={c}>
-                  {CATEGORY_LABELS[c]}
+              {(Object.keys(CATEGORY_LABELS) as Category[]).map((value) => (
+                <option key={value} value={value}>
+                  {CATEGORY_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
-
           <Field label="Data de referência">
             <input
               type="date"
-              name="reference_date"
-              value={formData.reference_date}
-              onChange={handleChange}
-              required
-              disabled={isLoading}
               className="input"
+              required
+              value={form.reference_date}
+              onChange={(e) => set("reference_date", e.target.value)}
             />
           </Field>
-
           <Field label="Período">
-            <select
-              name="period"
-              value={formData.period}
-              onChange={handleChange}
-              disabled={isLoading}
-              className="select"
+            <Select
+              value={form.period}
+              onChange={(e) => set("period", e.target.value as GoalPeriod)}
             >
-              {(Object.keys(GOAL_PERIOD_LABELS) as GoalPeriod[]).map((p) => (
-                <option key={p} value={p}>
-                  {GOAL_PERIOD_LABELS[p]}
-                </option>
-              ))}
-            </select>
+              {(Object.keys(GOAL_PERIOD_LABELS) as GoalPeriod[]).map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {GOAL_PERIOD_LABELS[value]}
+                  </option>
+                ),
+              )}
+            </Select>
           </Field>
-
-          <Field label="Status">
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              disabled={isLoading}
-              className="select"
-            >
-              {(Object.keys(GOAL_STATUS_LABELS) as GoalStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {GOAL_STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {id && (
+            <Field label="Status">
+              <Select
+                value={form.status}
+                onChange={(e) => set("status", e.target.value as GoalStatus)}
+              >
+                {(Object.keys(GOAL_STATUS_LABELS) as GoalStatus[]).map(
+                  (value) => (
+                    <option key={value} value={value}>
+                      {GOAL_STATUS_LABELS[value]}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </Field>
+          )}
         </div>
-
+        {error && <ErrorState message={error} />}
         <div className="flex justify-end gap-2 border-t border-border-c pt-4">
           <Link to="/goals" className="btn btn-ghost">
             Cancelar
           </Link>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading
-              ? "Salvando…"
-              : isEditing
-                ? "Salvar alterações"
-                : "Criar meta"}
+          <Button type="submit" disabled={saving}>
+            {saving ? "Salvando…" : id ? "Salvar alterações" : "Criar meta"}
           </Button>
         </div>
-      </form>
-    </FormPage>
+      </fieldset>
+    </form>
   );
 }

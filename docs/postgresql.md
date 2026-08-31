@@ -14,7 +14,14 @@ PostgreSQL é suportado por adapter concreto em `infrastructure/postgres`. O nú
 - `PostgresDatabase` encapsula `libpqxx`.
 - `PostgresTransaction` encapsula `pqxx::work`.
 
-As entidades de domínio iniciais já existem, mas ainda não há schema SQL, migrations ou repositórios PostgreSQL concretos para persisti-las.
+Goal, Task, Reminder e User possuem adapters concretos e migrations em
+`back-end/migrations/`. Execute `scripts/db-migrate.sh` antes da API; o Compose
+faz isso no serviço `migrate`. Contas, hashes e dados persistem no banco;
+sessões ficam em memória e exigem novo login após reinício.
+
+O endpoint `/api/health` verifica a conexão com `SELECT 1`. Queda posterior à
+inicialização retorna `status: degraded` e `database.connected: false`.
+Depois de restabelecer o banco, reinicie a API; não há reconexão automática.
 
 ## Dependência Escolhida
 
@@ -44,8 +51,8 @@ Use `.env.example` como referência. Não versionar `.env` real.
 ## Build
 
 ```bash
-cmake -S . -B build-postgres -DVIRTUAL_PLANNER_WITH_POSTGRES=ON
-cmake --build build-postgres
+cmake -S back-end -B back-end/build-postgres -DVIRTUAL_PLANNER_WITH_POSTGRES=ON
+cmake --build back-end/build-postgres
 ```
 
 Se `libpqxx` não estiver disponível, o CMake falha com mensagem explícita.
@@ -99,7 +106,7 @@ ctest --test-dir build --output-on-failure -R postgres_config_test
 Teste de integração PostgreSQL:
 
 ```bash
-ctest --test-dir build-postgres --output-on-failure -R postgres_integration_test
+ctest --test-dir back-end/build-postgres --output-on-failure -R postgres_integration_test
 ```
 
 O teste de integração valida conexão real, `commit()`, `rollback()` e `shutdown()`. Ele pula com mensagem clara quando `POSTGRES_DB`, `POSTGRES_USER` ou `POSTGRES_PASSWORD` não estão configuradas.

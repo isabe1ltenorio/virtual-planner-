@@ -4,7 +4,7 @@
 
 Este projeto é um monorepo acadêmico com dois workspaces: `back-end/`, uma base modular em C++20 com CMake, e `front-end/`, uma aplicação React + TypeScript com Vite. Este documento descreve o backend; as convenções de frontend estão em [AGENTS.md](../AGENTS.md).
 
-O código atual define estrutura, contratos, configuração, ciclo de vida de persistência, adapters PostgreSQL de `Goal` e `Reminder`, uma camada de API HTTP com serialização JSON compartilhada, casos de uso de `Goal` e `Reminder`, e a modelagem de domínio completa de planejamento pessoal.
+O código atual define estrutura, contratos, configuração, ciclo de vida de persistência, adapters PostgreSQL de `Goal`, `Task`, `Reminder` e `User`, uma API HTTP autenticada com serialização JSON, casos de uso de CRUD e perfil, e a modelagem de domínio completa de planejamento pessoal.
 
 A arquitetura deve continuar pragmática: manter limites claros, mas evitar frameworks, padrões ou infraestrutura além do que o trabalho realmente precisa.
 
@@ -12,7 +12,7 @@ A arquitetura deve continuar pragmática: manter limites claros, mas evitar fram
 
 - `core`: primitivas usadas por toda a aplicação, como perfil de execução e configuração imutável de inicialização.
 - `domain`: entidades, value objects, enums e regras básicas de domínio. Não deve depender de infraestrutura nem de detalhes de persistência.
-- `application`: casos de uso que coordenam o domínio por meio de contratos. Hoje cobre `Goal` (criar, listar, atualizar, mudar status, excluir) e `Reminder` (criar, listar com expansão de recorrência, atualizar, excluir). `Task` e `User` ainda não têm casos de uso.
+- `application`: casos de uso que coordenam o domínio por meio de contratos. Cobre CRUD de `Goal` e `Task`, conflitos de tarefas, `Reminder` com expansão de recorrência, perfil de `User` e relatórios.
 - `interfaces`: portas estáveis usadas pelas camadas internas para evitar acoplamento com tecnologias concretas — hoje `ConfigProvider` e `Logger`.
 - `persistence`: abstrações do ciclo de vida de armazenamento, transação e contratos de repositório, com implementações em memória em `persistence/memory`. Não deve conhecer PostgreSQL.
 - `api`: camada de fronteira HTTP. `api/json` é a **única** serialização de enums e value objects do projeto; `api/http` tem o servidor, a configuração de rede e o mapeamento de erro de domínio para status. É a única camada onde `httplib` e `nlohmann/json` podem aparecer.
@@ -135,6 +135,9 @@ repositório: ela é reintroduzida junto do primeiro consumidor real.
 reintroduzida junto do primeiro consumidor real, no mesmo PR, nunca antes.
 
 ### ADR-002 — Modelo de usuário: usuário único com `user_id` explícito (P-22A)
+
+**Status: substituída pela ADR-006.** O texto abaixo registra a decisão histórica,
+não o comportamento atual da API.
 
 **Contexto.** O domínio tem a entidade `User`, mas nenhuma tabela tem `user_id`
 e não existe nenhum requisito de autenticação no backlog. Ao mesmo tempo, quatro
@@ -360,30 +363,38 @@ upsert). Funcionaria e não tocaria em arquivos de outras issues, mas deixaria
 `Task` como o único domínio com um modelo de id diferente e reintroduziria em
 `tasks` o padrão que o #90 concluiu ser um risco em `reminders`.
 
+### ADR-006 — Identidade por sessão e isolamento dos dados (#111–#113)
+
+**Status: implementada; substitui a ADR-002.** Registra o modelo já adotado
+pela aplicação e usado pela entrega de perfil P-33.
+
+**Decisão.** Cada conta usa e-mail e senha; credenciais são verificadas com
+PBKDF2-SHA256 e salt individual. O servidor emite uma sessão opaca em cookie
+`vp_session` HttpOnly/SameSite=Strict, com Secure no perfil production. As
+rotas de domínio exigem sessão; o identificador do dono vem exclusivamente
+dela. Clientes não escolhem `user_id` em URL ou payload.
+
+**Persistência.** `PostgresUserRepository` grava perfil e hash em `users`.
+As migrations incrementais da faixa 050–059 preservam o schema anterior;
+as tabelas de metas, tarefas e lembretes são filtradas pelo dono nas consultas.
+A linha legada de ID 1 não autentica usuários automaticamente. Sessões vivem
+em memória; contas e dados persistem com PostgreSQL, mas o reinício exige login.
+
+**Perfil e erros.** `/api/users/me` consulta e altera apenas nome/e-mail do
+usuário autenticado. Credenciais nunca aparecem no JSON de perfil. E-mail
+já usado gera `ConflictError`/409; editar perfil preserva a senha. Recursos de
+outro dono respondem 404; ausência de sessão responde 401 antes dos handlers.
+
+**Consequências.** O frontend consome API real, sem identidade fictícia ou
+fallback de autenticação para mocks. Relatórios, conflitos e recorrências
+continuam calculados pelo backend. O contrato completo está em [api.md](api.md).
+
 ## Limitações Atuais
 
-- Não há pool de conexões.
-- Não há services de aplicação completos.
-- Não há repositórios concretos PostgreSQL para entidades de domínio.
-- Não há schema SQL real.
-- Não há migrations aplicáveis porque ainda não há mapeamento persistente definido.
-- O build com PostgreSQL depende de `libpqxx` disponível no ambiente.
-
-### ADR-002 — Modelo de usuário: usuário único com `user_id` explícito (P-22A)
-
-**Contexto.** O domínio tem a entidade `User`, mas nenhuma tabela tem `user_id` e não existe nenhum requisito de autenticação no backlog. Ao mesmo tempo, quatro pessoas vão escrever migrations de `Goal`, `Task`, `Reminder` e `User` na Onda 3. Se `user_id` entrar depois, as quatro precisam refazer schema e backfill.
-
-**Decisão.** O sistema é **single-tenant**: existe exatamente um usuário, sem cadastro, login, senha ou sessão. Ainda assim, as tabelas de dados do usuário nascem com `user_id` explícito, apontando para esse usuário único semeado pela migration base.
-
-**Impacto por entidade.**
-
-*   **User:** Tabela `users` criada na faixa base, com uma linha semeada de `id = 1`. Sem coluna de senha e sem coluna de credencial. `email` continua sendo apenas dado de perfil.
-*   **Goal:** A migration de Goal adiciona `user_id BIGINT NOT NULL REFERENCES users(id)`.
-*   **Task:** Migration de Task já nasce com `user_id BIGINT NOT NULL REFERENCES users(id)`.
-*   **Reminder:** Migration de Reminder já nasce com `user_id BIGINT NOT NULL REFERENCES users(id)`.
-
-**Impacto em endpoints e autenticação.**
-
-*   Não há autenticação, nem middleware de sessão, nem token.
-*   O usuário corrente é resolvido no composition root como o usuário único e injetado nos casos de uso; nenhum endpoint recebe `user_id` pelo cliente.
-*   Endpoints de `Goal`, `Task` e `Reminder` não expõem `user_id` no payload nesta fase; o filtro por usuário é aplicado no servidor.
+- Não há pool de conexões; a API serializa handlers numa thread para respeitar
+  a conexão PostgreSQL compartilhada e os repositórios em memória.
+- Sessões são voláteis; reinício exige novo login.
+- Sem PostgreSQL habilitado, contas e dados também são voláteis.
+- Migrações são aplicadas pelo script ou serviço `migrate` do Compose antes da API.
+- O build PostgreSQL exige `libpqxx` 8.x; o build padrão permanece independente.
+- O Compose HTTP é local; exposição pública exige HTTPS e configuração própria.

@@ -51,12 +51,6 @@ interface RequestOptions {
 }
 
 function buildUrl(path: string, query?: Record<string, string>): string {
-  if (apiBaseUrl === undefined) {
-    throw new Error(
-      "VITE_API_URL não está definida: o cliente HTTP não deveria ter sido chamado.",
-    );
-  }
-
   const url = `${apiBaseUrl}${path}`;
 
   if (query === undefined || Object.keys(query).length === 0) {

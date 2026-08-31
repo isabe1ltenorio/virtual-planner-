@@ -30,9 +30,7 @@ export function occursOn(
     case "Daily":
       return true;
     case "Weekly": {
-      const days = Math.round(
-        (target.getTime() - base.getTime()) / 86_400_000,
-      );
+      const days = Math.round((target.getTime() - base.getTime()) / 86_400_000);
       return days % 7 === 0;
     }
     case "Monthly":

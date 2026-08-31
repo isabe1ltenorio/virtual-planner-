@@ -1,152 +1,188 @@
-import { useEffect, useState } from "react";
-import { CalendarDays, TriangleAlert } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Link, useNavigate } from "react-router";
+import { addDays, startOfWeek } from "date-fns";
 import { virtualPlannerApi } from "../lib/api/virtualPlannerApi";
+import { formatDateForInput, formatDateShort } from "../lib/formatters";
+import type { TaskStatus } from "../types/domain";
+import { useApiResource } from "../hooks/useApiResource";
 import {
-  formatDateForInput,
-  formatMinutesToTime,
-  SHIFT_LABELS,
-} from "../lib/formatters";
-import type { Shift } from "../types/domain";
-import { Card, EmptyState, LoadingState, PageHeader } from "../components/ui";
+  Button,
+  Card,
+  ErrorState,
+  Field,
+  LoadingState,
+  PageHeader,
+  Select,
+} from "../components/ui";
+import { DayTimeline } from "../components/DayTimeline";
 
-type AgendaItem = {
-  id: string;
-  type: "Task" | "Reminder";
-  description: string;
-  startMinutes?: number;
-  endMinutes?: number;
-  shift?: Shift;
-  hasConflict?: boolean;
-};
+function visibleDates(date: string, view: "day" | "week"): string[] {
+  const anchor = new Date(`${date}T00:00:00`);
+  const start =
+    view === "week" ? startOfWeek(anchor, { weekStartsOn: 1 }) : anchor;
+  return Array.from({ length: view === "week" ? 7 : 1 }, (_, index) =>
+    formatDateForInput(addDays(start, index)),
+  );
+}
 
 export function PlannerPage() {
-  const [items, setItems] = useState<AgendaItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const date = formatDateForInput();
-
-  useEffect(() => {
-    (async () => {
-      setIsLoading(true);
-      try {
-        const [tasks, reminders] = await Promise.all([
-          virtualPlannerApi.getTasks(),
-          virtualPlannerApi.getReminders(),
-        ]);
-
-        const dayTasks: AgendaItem[] = tasks
-          .filter((t) => t.date === date)
-          .map((t) => ({
-            id: `task-${t.id}`,
-            type: "Task",
-            description: t.description,
-            startMinutes: t.startMinutes,
-            endMinutes: t.endMinutes,
-            shift: t.shift,
-          }));
-
-        const dayReminders: AgendaItem[] = reminders
-          .filter((r) => r.date === date)
-          .map((r) => ({
-            id: `rem-${r.id}`,
-            type: "Reminder",
-            description: r.description,
-            startMinutes: r.startMinutes,
-            endMinutes: r.endMinutes,
-          }));
-
-        const agenda = [...dayTasks, ...dayReminders].map((item, i, arr) => ({
-          ...item,
-          hasConflict:
-            item.startMinutes != null &&
-            item.endMinutes != null &&
-            arr.some(
-              (other, j) =>
-                i !== j &&
-                other.startMinutes != null &&
-                other.endMinutes != null &&
-                item.startMinutes! < other.endMinutes! &&
-                item.endMinutes! > other.startMinutes!,
-            ),
-        }));
-
-        agenda.sort(
-          (a, b) => (a.startMinutes ?? 1e9) - (b.startMinutes ?? 1e9),
-        );
-        setItems(agenda);
-      } catch (error) {
-        console.error("Erro ao carregar o planejamento:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [date]);
-
+  const [date, setDate] = useState(formatDateForInput());
+  const [view, setView] = useState<"day" | "week">("day");
+  const [updatingId, setUpdatingId] = useState<number>();
+  const [mutationError, setMutationError] = useState<string>();
+  const navigate = useNavigate();
+  const days = visibleDates(date, view);
+  const load = useCallback(async () => {
+    const dates = visibleDates(date, view);
+    const startDate = dates[0];
+    const endDate = dates[dates.length - 1];
+    const [tasks, occurrences, conflicts] = await Promise.all([
+      virtualPlannerApi.getTasks({ start_date: startDate, end_date: endDate }),
+      virtualPlannerApi.getReminderOccurrences({
+        start: startDate,
+        end: endDate,
+      }),
+      Promise.all(dates.map((day) => virtualPlannerApi.getTaskConflicts(day))),
+    ]);
+    return {
+      tasks,
+      occurrences,
+      conflictIds: new Set(
+        conflicts
+          .flat()
+          .flatMap((pair) => [pair.first_task_id, pair.second_task_id]),
+      ),
+    };
+  }, [date, view]);
+  const resource = useApiResource(load);
+  const data = resource.data;
+  async function changeStatus(id: number, status: TaskStatus) {
+    if (updatingId !== undefined) return;
+    setUpdatingId(id);
+    setMutationError(undefined);
+    try {
+      await virtualPlannerApi.updateTask(id, { status });
+      resource.retry();
+    } catch (error) {
+      setMutationError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível alterar o status.",
+      );
+    } finally {
+      setUpdatingId(undefined);
+    }
+  }
+  const move = (direction: number) =>
+    setDate(
+      formatDateForInput(
+        addDays(
+          new Date(`${date}T00:00:00`),
+          direction * (view === "week" ? 7 : 1),
+        ),
+      ),
+    );
   return (
     <>
       <PageHeader
         title="Planejamento"
-        subtitle={new Date().toLocaleDateString("pt-BR", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        })}
+        subtitle="Tarefas e ocorrências de lembretes, com conflitos informados pela API."
+        actions={
+          <Link to={`/tasks/new?date=${date}`} className="btn btn-primary">
+            Nova tarefa
+          </Link>
+        }
       />
-
-      {isLoading ? (
+      <Card className="flex flex-wrap items-end gap-4 p-4">
+        <Field label="Data">
+          <input
+            type="date"
+            className="input"
+            value={date}
+            onChange={(e) => {
+              if (e.target.value) setDate(e.target.value);
+            }}
+          />
+        </Field>
+        <Field label="Visualização">
+          <Select
+            value={view}
+            onChange={(e) => setView(e.target.value as typeof view)}
+          >
+            <option value="day">Dia</option>
+            <option value="week">Semana</option>
+          </Select>
+        </Field>
+        <Button type="button" variant="outline" onClick={() => move(-1)}>
+          Anterior
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setDate(formatDateForInput())}
+        >
+          Hoje
+        </Button>
+        <Button type="button" variant="outline" onClick={() => move(1)}>
+          Próximo
+        </Button>
+      </Card>
+      {mutationError && <ErrorState message={mutationError} />}
+      {resource.isLoading ? (
         <LoadingState label="Montando a agenda…" />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<CalendarDays size={28} strokeWidth={1.5} />}
-          title="Dia livre"
-          description="Nenhuma tarefa ou lembrete agendado para hoje."
-        />
+      ) : resource.error ? (
+        <ErrorState message={resource.error} onRetry={resource.retry} />
       ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <Card
-              key={item.id}
-              className={`flex items-center gap-4 p-4 ${
-                item.hasConflict
-                  ? "border-red-300 dark:border-red-900"
-                  : ""
-              }`}
+        data && (
+          <>
+            {data.conflictIds.size > 0 && (
+              <p
+                role="status"
+                className="text-sm font-medium text-red-700 dark:text-red-300"
+              >
+                {data.conflictIds.size} tarefa(s) com conflito de horário no
+                período.
+              </p>
+            )}
+            <div
+              className={
+                view === "week"
+                  ? "flex items-start gap-4 overflow-x-auto pb-4"
+                  : "space-y-4"
+              }
             >
-              <div className="w-20 shrink-0 text-center">
-                {item.startMinutes != null ? (
-                  <>
-                    <span className="stat-value block text-sm font-semibold text-ink">
-                      {formatMinutesToTime(item.startMinutes)}
-                    </span>
-                    {item.endMinutes != null && (
-                      <span className="block text-xs text-subtle">
-                        {formatMinutesToTime(item.endMinutes)}
-                      </span>
+              {days.map((day) => (
+                <Card
+                  key={day}
+                  className={view === "week" ? "w-[28rem] shrink-0 p-4" : "p-5"}
+                >
+                  <h2 className="mb-5 text-sm font-semibold text-ink">
+                    {new Date(`${day}T00:00:00`).toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                    })}
+                    , {formatDateShort(day)}
+                  </h2>
+                  <DayTimeline
+                    tasks={data.tasks.filter((task) => task.date === day)}
+                    occurrences={data.occurrences.filter(
+                      (occurrence) => occurrence.date === day,
                     )}
-                  </>
-                ) : (
-                  <span className="text-xs font-medium text-muted">
-                    {item.shift ? SHIFT_LABELS[item.shift] : "—"}
-                  </span>
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <span className="text-xs font-medium uppercase tracking-wide text-subtle">
-                  {item.type === "Task" ? "Tarefa" : "Lembrete"}
-                </span>
-                <p className="truncate font-medium text-ink">
-                  {item.description}
-                </p>
-                {item.hasConflict && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-red-600">
-                    <TriangleAlert size={12} />
-                    Conflito de horário
-                  </span>
-                )}
-              </div>
-            </Card>
-          ))}
-        </div>
+                    conflictTaskIds={data.conflictIds}
+                    updatingTaskIds={
+                      updatingId === undefined
+                        ? undefined
+                        : new Set([updatingId])
+                    }
+                    onStatusChange={changeStatus}
+                    onEmptyClick={(minutes) =>
+                      navigate(`/tasks/new?date=${day}&start=${minutes}`)
+                    }
+                  />
+                </Card>
+              ))}
+            </div>
+          </>
+        )
       )}
     </>
   );

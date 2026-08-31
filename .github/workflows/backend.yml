@@ -11,11 +11,13 @@ on:
     paths:
       - "back-end/**"
       - "scripts/db-migrate.sh"
+      - "scripts/smoke-api.py"
       - ".github/workflows/backend.yml"
   pull_request:
     paths:
       - "back-end/**"
       - "scripts/db-migrate.sh"
+      - "scripts/smoke-api.py"
       - ".github/workflows/backend.yml"
 
 jobs:
@@ -239,6 +241,7 @@ jobs:
           cmake -S back-end -B back-end/build
           -DCMAKE_BUILD_TYPE=Release
           -DVIRTUAL_PLANNER_WITH_POSTGRES=ON
+          -DVIRTUAL_PLANNER_WITH_HTTP=ON
 
       - name: Build
         run: cmake --build back-end/build
@@ -248,3 +251,20 @@ jobs:
 
       - name: Run tests (unitários + integração PostgreSQL real)
         run: ctest --test-dir back-end/build --output-on-failure
+
+      - name: Smoke test HTTP com PostgreSQL
+        env:
+          VP_HTTP_HOST: 127.0.0.1
+          VP_HTTP_PORT: "18080"
+        run: |
+          set -euo pipefail
+          ./back-end/build/virtual_planner > /tmp/virtual-planner-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..50}; do
+            if curl -fsS http://127.0.0.1:18080/api/health > /dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          python3 scripts/smoke-api.py --base-url http://127.0.0.1:18080
