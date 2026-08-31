@@ -309,7 +309,7 @@ export function DashboardPage() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
             <Card className="p-5">
               <h2 className="mb-3 text-sm font-semibold text-ink">
                 Tarefas por status
@@ -399,48 +399,47 @@ export function DashboardPage() {
                 </AreaChart>
               </ResponsiveContainer>
             </Card>
+
+            <Card className="p-5">
+              <h2 className="mb-3 text-sm font-semibold text-ink">
+                Por categoria
+              </h2>
+              {categoryData.length === 0 ? (
+                <p className="py-10 text-center text-sm text-subtle">
+                  Sem tarefas nem metas ainda.
+                </p>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart
+                    data={categoryData}
+                    layout="vertical"
+                    margin={{ left: 4, right: 12 }}
+                  >
+                    <CartesianGrid stroke={CHART_GRID} horizontal={false} />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: CHART_AXIS }}
+                      axisLine={{ stroke: CHART_GRID }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={78}
+                      tick={{ fontSize: 10, fill: CHART_AXIS }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="tarefas" radius={[0, 4, 4, 0]} fill="#9333ea" />
+                    <Bar dataKey="metas" radius={[0, 4, 4, 0]} fill="#c084fc" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </Card>
           </div>
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold text-ink">
-              Por categoria
-            </h2>
-            {categoryData.length === 0 ? (
-              <p className="py-10 text-center text-sm text-subtle">
-                Sem tarefas nem metas ainda.
-              </p>
-            ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart
-                  data={categoryData}
-                  layout="vertical"
-                  margin={{ left: 8, right: 16 }}
-                >
-                  <CartesianGrid stroke={CHART_GRID} horizontal={false} />
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: CHART_AXIS }}
-                    axisLine={{ stroke: CHART_GRID }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={92}
-                    tick={{ fontSize: 11, fill: CHART_AXIS }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="tarefas" radius={[0, 4, 4, 0]} fill="#9333ea" />
-                  <Bar dataKey="metas" radius={[0, 4, 4, 0]} fill="#c084fc" />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </Card>
-
         </div>
 
         {/* Trilho direito */}
