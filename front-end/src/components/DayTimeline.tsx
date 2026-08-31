@@ -14,7 +14,8 @@ interface DayTimelineProps {
   onStatusChange: (id: number, status: Task["status"]) => void;
 }
 
-const PX_PER_MIN = 0.9; // 1h ≈ 54px
+const PX_PER_MIN = 0.55; // 1h ≈ 33px — compacto; o container rola se passar
+const MAX_TRACK_H = 460;
 const HOUR = 60;
 
 // Empacota tarefas que se sobrepõem em colunas lado a lado.
@@ -70,7 +71,10 @@ export function DayTimeline({ tasks, onStatusChange }: DayTimelineProps) {
       {timed.length === 0 && untimed.length === 0 ? (
         <p className="py-8 text-center text-sm text-subtle">Nada agendado.</p>
       ) : (
-        <div className="flex gap-3">
+        <div
+          className="flex gap-3 overflow-y-auto pr-1"
+          style={{ maxHeight: MAX_TRACK_H }}
+        >
           {/* Régua de horas */}
           <div className="relative w-12 shrink-0" style={{ height }}>
             {hours.map((m) => (

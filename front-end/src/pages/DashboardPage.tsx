@@ -253,6 +253,46 @@ export function DashboardPage() {
         {/* Coluna principal */}
         <div className="space-y-6 lg:col-span-2">
           <Card className="p-5">
+            <h2 className="mb-4 text-sm font-semibold text-ink">
+              Agenda de {dayLabel}
+            </h2>
+            <DayTimeline tasks={dayTasks} onStatusChange={handleStatus} />
+
+            {dayReminders.length > 0 && (
+              <div className="mt-4 border-t border-border-c pt-3">
+                <p className="mb-2 text-xs font-medium text-subtle">
+                  Lembretes
+                </p>
+                <ul className="space-y-2">
+                  {dayReminders
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        a.reminder.startMinutes - b.reminder.startMinutes,
+                    )
+                    .map((o) => (
+                      <li
+                        key={`${o.reminder.id}-${o.date}`}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <span className="tabular-nums text-xs text-muted">
+                          {formatMinutesToTime(o.reminder.startMinutes)}
+                        </span>
+                        <span className="truncate text-ink">
+                          {o.reminder.description}
+                        </span>
+                        <span className="ml-auto shrink-0 text-xs text-subtle">
+                          {REMINDER_TYPE_LABELS[o.reminder.type]}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-sm font-medium text-muted">
                 Produtividade de {dayLabel}
@@ -401,45 +441,6 @@ export function DashboardPage() {
             )}
           </Card>
 
-          <Card className="p-5">
-            <h2 className="mb-4 text-sm font-semibold text-ink">
-              Agenda de {dayLabel}
-            </h2>
-            <DayTimeline tasks={dayTasks} onStatusChange={handleStatus} />
-
-            {dayReminders.length > 0 && (
-              <div className="mt-4 border-t border-border-c pt-3">
-                <p className="mb-2 text-xs font-medium text-subtle">
-                  Lembretes
-                </p>
-                <ul className="space-y-2">
-                  {dayReminders
-                    .slice()
-                    .sort(
-                      (a, b) =>
-                        a.reminder.startMinutes - b.reminder.startMinutes,
-                    )
-                    .map((o) => (
-                      <li
-                        key={`${o.reminder.id}-${o.date}`}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
-                        <span className="tabular-nums text-xs text-muted">
-                          {formatMinutesToTime(o.reminder.startMinutes)}
-                        </span>
-                        <span className="truncate text-ink">
-                          {o.reminder.description}
-                        </span>
-                        <span className="ml-auto shrink-0 text-xs text-subtle">
-                          {REMINDER_TYPE_LABELS[o.reminder.type]}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
-          </Card>
         </div>
 
         {/* Trilho direito */}
