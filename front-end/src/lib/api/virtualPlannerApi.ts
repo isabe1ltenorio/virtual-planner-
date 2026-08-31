@@ -1,7 +1,6 @@
-import type { Task, Goal, Reminder } from "../../types/domain";
-import { mockTasks, mockGoals, mockReminders } from "../../mocks/seed";
-import { isApiEnabled } from "./config";
 import * as goalsApi from "./goalsApi";
+import * as tasksApi from "./tasksApi";
+import * as remindersApi from "./remindersApi";
 
 // Fachada única das telas. Os métodos de `Goal` falam com o backend quando
 // `VITE_API_URL` está definida, e caem nos mocks quando não está.
@@ -10,7 +9,7 @@ import * as goalsApi from "./goalsApi";
 // A escolha fica aqui, e não nas páginas, para que ligar o resto no futuro seja
 // mudança de um arquivo só.
 
-//simula tempo de resposta da internet
+/*//simula tempo de resposta da internet
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 //simula o banco de dados rodando
@@ -171,4 +170,27 @@ export const virtualPlannerApi = {
     const task = currentTasks.find((t) => t.id === id);
     return task ? { ...task } : null;
   },
+};*/
+
+export const virtualPlannerApi = {
+  // --- METAS ---
+  getGoals: goalsApi.listGoals,
+  getGoalById: goalsApi.getGoalById,
+  createGoal: goalsApi.createGoal,
+  updateGoal: goalsApi.updateGoal,
+  deleteGoal: goalsApi.deleteGoal,
+
+  // --- TAREFAS ---
+  getTasks: tasksApi.listTasks,
+  getTaskById: tasksApi.getTaskById,
+  createTask: tasksApi.createTask,
+  updateTask: tasksApi.updateTask,
+  deleteTask: tasksApi.deleteTask,
+
+  // --- LEMBRETES ---
+  getReminders: remindersApi.listReminders,
+  getReminderById: remindersApi.getReminderById,
+  createReminder: remindersApi.createReminder,
+  updateReminder: remindersApi.updateReminder,
+  deleteReminder: remindersApi.deleteReminder,
 };
