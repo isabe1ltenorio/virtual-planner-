@@ -23,6 +23,7 @@ export const virtualPlannerApi = {
 
   // --- LEMBRETES ---
   getReminders: remindersApi.listReminders,
+  getReminderOccurrences: remindersApi.listReminderOccurrences,
   getReminderById: remindersApi.getReminderById,
   createReminder: remindersApi.createReminder,
   updateReminder: remindersApi.updateReminder,

@@ -74,6 +74,31 @@ export async function listReminders(range?: {
   return [...byId.values()];
 }
 
+export interface ReminderOccurrence {
+  reminder: Reminder;
+  /** Data em que a recorrência cai (YYYY-MM-DD), não a data-base do lembrete. */
+  date: string;
+}
+
+// Preserva as ocorrências expandidas — usado pelo Resumo do dia, que precisa
+// saber que um lembrete semanal "cai hoje" mesmo que a data-base seja antiga.
+export async function listReminderOccurrences(range?: {
+  start: string;
+  end: string;
+}): Promise<ReminderOccurrence[]> {
+  const start = range?.start ?? isoOffsetDays(-1);
+  const end = range?.end ?? isoOffsetDays(60);
+
+  const occurrences = await request<OccurrenceWire[]>("/reminders", {
+    query: { start_date: start, end_date: end },
+  });
+
+  return occurrences.map((occ) => ({
+    reminder: fromWire(occ.reminder),
+    date: occ.occurrence_date,
+  }));
+}
+
 export async function getReminderById(id: number): Promise<Reminder> {
   return fromWire(await request<ReminderWire>(`/reminders/${id}`));
 }
