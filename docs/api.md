@@ -64,12 +64,16 @@ criar conta, abrir e encerrar sessão e ler o próprio perfil. Não há como lis
 usuários, editar nome ou e-mail, nem trocar senha pela API.
 
 `Goal`, `Task` e `Reminder` têm representação JSON **e** endpoints, todos na
-tabela acima.
+tabela acima. `User` é o caso invertido: tem representação JSON (seção
+[`User`](#user), P-29.4), mas nenhum endpoint próprio — o payload é usado por
+`GET /api/auth/me`.
 
 ## Onde está o código
 
 - Serialização compartilhada: `back-end/include/virtual_planner/api/json/shared_json.hpp`
   e `back-end/src/api/json/shared_json.cpp`
+- Serialização de `User`: `back-end/include/virtual_planner/api/json/user_json.hpp`
+  e `back-end/src/api/json/user_json.cpp`
 - Servidor: `back-end/include/virtual_planner/api/http/api_server.hpp` e
   `back-end/src/api/http/api_server.cpp`
 - Autenticação: `back-end/src/api/http/routes/auth_routes.cpp`
@@ -503,6 +507,59 @@ Funções:
 nlohmann::json to_json(const domain::TimeSlot& value);
 domain::TimeSlot time_slot_from_json(const nlohmann::json& value);
 ```
+
+## User
+
+A representação JSON de `User` é o perfil, e só o perfil: `id`, `name` e
+`email`. É o payload que `GET /api/auth/me` já devolve.
+
+Exemplo:
+
+```json
+{
+  "id": 42,
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+```
+
+| Campo | Tipo JSON | Significado |
+|---|---|---|
+| `id` | inteiro sem sinal | Identificador do usuário. `0` é aceito e significa "ainda não persistido", como no corpo que `POST /api/auth/register` monta antes de o banco atribuir o id |
+| `name` | string | Nome de exibição. Não pode ser vazio nem só espaço em branco |
+| `email` | string | E-mail de perfil, validado por `domain::User` |
+
+Diferente de `Goal`, `Task` e `Reminder`, `User` não consome nenhuma conversão
+de P-29.0: o perfil não tem enum nem value object. A regra de `id` é a mesma das
+demais entidades — inteiro sem sinal, com `1.5`, `-1` e `"42"` rejeitados.
+
+O e-mail segue a validação de domínio, deliberadamente mínima: exatamente um
+`@`, parte local não vazia e domínio com um `.` que não seja o primeiro nem o
+último caractere. `alice@example` e `alice.example.com` são rejeitados;
+comprimento máximo, TLD conhecido e caracteres permitidos na parte local **não**
+são validados.
+
+### Credencial nunca entra neste payload
+
+Não há campo de senha na saída, e `domain::User` sequer guarda um: a credencial
+vive apenas na tabela `users` e sai do repositório por
+`find_credentials_by_email`, que devolve `persistence::UserCredentials` e nunca
+passa pela camada JSON.
+
+Na **entrada**, um objeto que traga `password`, `password_hash`, `senha` ou
+`credentials` é rejeitado com `400` e `code="validation_error"`. Ignorar o campo
+em silêncio faria o servidor responder sucesso a uma troca de senha que nunca
+aconteceu, e o cliente seguiria acreditando que a senha mudou. Não existe
+endpoint de troca de senha na API — ver "O que ainda não existe".
+
+Funções:
+
+```cpp
+nlohmann::json to_json(const domain::User& user);
+domain::User user_from_json(const nlohmann::json& value);
+```
+
+Declaradas em `back-end/include/virtual_planner/api/json/user_json.hpp`.
 
 ## Goal
 
