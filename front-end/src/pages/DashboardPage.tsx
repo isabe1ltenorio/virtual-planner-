@@ -29,12 +29,7 @@ import {
   TASK_STATUS_COLORS,
   REMINDER_TYPE_LABELS,
 } from "../lib/formatters";
-import {
-  Card,
-  LoadingState,
-  PageHeader,
-  StatCard,
-} from "../components/ui";
+import { Card, LoadingState, PageHeader, StatCard } from "../components/ui";
 import { MiniCalendar } from "../components/MiniCalendar";
 import { DayTimeline } from "../components/DayTimeline";
 import { buttonClass } from "../components/buttonStyles";
@@ -147,7 +142,10 @@ export function DashboardPage() {
       const d = addDays(start, i);
       const key = formatDateForInput(d);
       return {
-        label: d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+        label: d.toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+        }),
         executadas: tasks.filter(
           (t) => t.date === key && t.status === "Executed",
         ).length,
@@ -167,7 +165,9 @@ export function DashboardPage() {
   );
 
   const upcoming = useMemo(() => {
-    const horizon = formatDateForInput(addDays(new Date(`${today}T00:00:00`), 7));
+    const horizon = formatDateForInput(
+      addDays(new Date(`${today}T00:00:00`), 7),
+    );
     type Item = {
       key: string;
       date: string;
@@ -231,7 +231,11 @@ export function DashboardPage() {
       />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Pendentes" value={pending} icon={<Clock size={16} />} />
+        <StatCard
+          label="Pendentes"
+          value={pending}
+          icon={<Clock size={16} />}
+        />
         <StatCard
           label="Concluídas"
           value={executed}
@@ -249,9 +253,153 @@ export function DashboardPage() {
         />
       </div>
 
+      <Card className="p-5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-muted">
+            Produtividade de {dayLabel}
+          </span>
+          <span className="stat-value text-lg font-semibold text-ink">
+            {productivity}%
+          </span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+          <div
+            className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
+            style={{ width: `${productivity}%` }}
+          />
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        <Card className="p-5">
+          <h2 className="mb-3 text-sm font-semibold text-ink">
+            Tarefas por status
+          </h2>
+          {statusData.length === 0 ? (
+            <p className="py-10 text-center text-sm text-subtle">
+              Sem tarefas ainda.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={statusData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={52}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  stroke="none"
+                >
+                  {statusData.map((d) => (
+                    <Cell key={d.name} fill={d.fill} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink">Execução</h2>
+            <div className="inline-flex rounded-lg border border-border-c bg-surface p-0.5">
+              {([14, 30] as RangeDays[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRange(r)}
+                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                    range === r
+                      ? "bg-brand-600 text-white"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {r}d
+                </button>
+              ))}
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={execData} margin={{ left: -20, right: 8, top: 4 }}>
+              <defs>
+                <linearGradient id="exec" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#9333ea" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#9333ea" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={CHART_GRID} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: CHART_AXIS }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+                axisLine={{ stroke: CHART_GRID }}
+                tickLine={false}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 11, fill: CHART_AXIS }}
+                axisLine={false}
+                tickLine={false}
+                width={28}
+              />
+              <Tooltip />
+              <Area
+                type="monotone"
+                dataKey="executadas"
+                stroke="#9333ea"
+                strokeWidth={2}
+                fill="url(#exec)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="mb-3 text-sm font-semibold text-ink">Por categoria</h2>
+          {categoryData.length === 0 ? (
+            <p className="py-10 text-center text-sm text-subtle">
+              Sem tarefas nem metas ainda.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={categoryData}
+                layout="vertical"
+                margin={{ left: 4, right: 12 }}
+              >
+                <CartesianGrid stroke={CHART_GRID} horizontal={false} />
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: CHART_AXIS }}
+                  axisLine={{ stroke: CHART_GRID }}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={78}
+                  tick={{ fontSize: 10, fill: CHART_AXIS }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="tarefas" radius={[0, 4, 4, 0]} fill="#9333ea" />
+                <Bar dataKey="metas" radius={[0, 4, 4, 0]} fill="#c084fc" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Coluna principal */}
-        <div className="space-y-6 lg:col-span-2">
+        {/* Agenda do dia */}
+        <div className="lg:col-span-2">
           <Card className="p-5">
             <h2 className="mb-4 text-sm font-semibold text-ink">
               Agenda de {dayLabel}
@@ -291,155 +439,6 @@ export function DashboardPage() {
               </div>
             )}
           </Card>
-
-          <Card className="p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-muted">
-                Produtividade de {dayLabel}
-              </span>
-              <span className="stat-value text-lg font-semibold text-ink">
-                {productivity}%
-              </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
-              <div
-                className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
-                style={{ width: `${productivity}%` }}
-              />
-            </div>
-          </Card>
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-            <Card className="p-5">
-              <h2 className="mb-3 text-sm font-semibold text-ink">
-                Tarefas por status
-              </h2>
-              {statusData.length === 0 ? (
-                <p className="py-10 text-center text-sm text-subtle">
-                  Sem tarefas ainda.
-                </p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={52}
-                      outerRadius={80}
-                      paddingAngle={2}
-                      stroke="none"
-                    >
-                      {statusData.map((d) => (
-                        <Cell key={d.name} fill={d.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend
-                      iconType="circle"
-                      wrapperStyle={{ fontSize: 12 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </Card>
-
-            <Card className="p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-ink">Execução</h2>
-                <div className="inline-flex rounded-lg border border-border-c bg-surface p-0.5">
-                  {([14, 30] as RangeDays[]).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => setRange(r)}
-                      className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                        range === r
-                          ? "bg-brand-600 text-white"
-                          : "text-muted hover:text-ink"
-                      }`}
-                    >
-                      {r}d
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={execData} margin={{ left: -20, right: 8, top: 4 }}>
-                  <defs>
-                    <linearGradient id="exec" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#9333ea" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#9333ea" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={CHART_GRID} vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 11, fill: CHART_AXIS }}
-                    interval="preserveStartEnd"
-                    minTickGap={24}
-                    axisLine={{ stroke: CHART_GRID }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: CHART_AXIS }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={28}
-                  />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="executadas"
-                    stroke="#9333ea"
-                    strokeWidth={2}
-                    fill="url(#exec)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Card>
-
-            <Card className="p-5">
-              <h2 className="mb-3 text-sm font-semibold text-ink">
-                Por categoria
-              </h2>
-              {categoryData.length === 0 ? (
-                <p className="py-10 text-center text-sm text-subtle">
-                  Sem tarefas nem metas ainda.
-                </p>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart
-                    data={categoryData}
-                    layout="vertical"
-                    margin={{ left: 4, right: 12 }}
-                  >
-                    <CartesianGrid stroke={CHART_GRID} horizontal={false} />
-                    <XAxis
-                      type="number"
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: CHART_AXIS }}
-                      axisLine={{ stroke: CHART_GRID }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={78}
-                      tick={{ fontSize: 10, fill: CHART_AXIS }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="tarefas" radius={[0, 4, 4, 0]} fill="#9333ea" />
-                    <Bar dataKey="metas" radius={[0, 4, 4, 0]} fill="#c084fc" />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </Card>
-          </div>
         </div>
 
         {/* Trilho direito */}
