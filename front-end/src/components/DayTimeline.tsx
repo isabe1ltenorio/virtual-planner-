@@ -140,45 +140,6 @@ export function DayTimeline({
               />
             ))}
 
-            {/* Faixas de turno: ocupam a janela inteira do turno, atrás dos blocos */}
-            {shiftTasks.map((task, i) => {
-              const w = SHIFT_WINDOW[task.shift as Shift];
-              const color = CATEGORY_COLORS[task.category];
-              return (
-                <div
-                  key={task.id}
-                  className="absolute overflow-hidden rounded-md border border-dashed px-2 py-1 text-xs"
-                  style={{
-                    top: (w.start - start) * PX_PER_MIN,
-                    height: (w.end - w.start) * PX_PER_MIN - 3,
-                    left: 4 + i * 8,
-                    right: 4,
-                    borderColor: color,
-                    background: `color-mix(in srgb, ${color} 7%, var(--surface))`,
-                  }}
-                >
-                  <Link
-                    to={`/tasks/${task.id}/edit`}
-                    className="block truncate font-medium text-ink hover:underline"
-                  >
-                    {task.description}
-                  </Link>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                    <span>{SHIFT_LABELS[task.shift as Shift]}</span>
-                    <span className="truncate">
-                      · {CATEGORY_LABELS[task.category]}
-                    </span>
-                  </div>
-                  <div className="mt-1">
-                    <StatusMenu
-                      value={task.status}
-                      onChange={(next) => onStatusChange(task.id, next)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-
             {placed.map(({ task, lane }) => {
               const s = task.startMinutes ?? start;
               const e = task.endMinutes ?? s + 30;
@@ -224,6 +185,47 @@ export function DayTimeline({
               );
             })}
           </div>
+
+          {/* Coluna de turnos: cada tarefa por turno ocupa a janela do turno,
+              numa faixa própria à direita — nunca colide com os blocos. */}
+          {shiftTasks.length > 0 && (
+            <div className="relative w-28 shrink-0" style={{ height }}>
+              {shiftTasks.map((task, i) => {
+                const w = SHIFT_WINDOW[task.shift as Shift];
+                const color = CATEGORY_COLORS[task.category];
+                return (
+                  <div
+                    key={task.id}
+                    className="absolute overflow-hidden rounded-md border border-dashed px-1.5 py-1 text-[11px]"
+                    style={{
+                      top: (w.start - start) * PX_PER_MIN,
+                      height: (w.end - w.start) * PX_PER_MIN - 3,
+                      left: i * 6,
+                      right: 0,
+                      borderColor: color,
+                      background: `color-mix(in srgb, ${color} 10%, var(--surface))`,
+                    }}
+                  >
+                    <span className="mb-0.5 block font-medium text-subtle">
+                      {SHIFT_LABELS[task.shift as Shift]}
+                    </span>
+                    <Link
+                      to={`/tasks/${task.id}/edit`}
+                      className="block truncate font-medium text-ink hover:underline"
+                    >
+                      {task.description}
+                    </Link>
+                    <div className="mt-1">
+                      <StatusMenu
+                        value={task.status}
+                        onChange={(next) => onStatusChange(task.id, next)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

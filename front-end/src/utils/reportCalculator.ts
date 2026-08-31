@@ -1,4 +1,5 @@
-import type { Task, Goal } from "../types/domain";
+import type { Task, Goal, Category } from "../types/domain";
+import { CATEGORY_LABELS, formatDateShort } from "../lib/formatters";
 
 export interface ReportStats {
   tasks: { total: number; completed: number; percentage: number };
@@ -21,9 +22,9 @@ export function calculateReportStats(
     ["Completed", "Partially Completed"].includes(g.status),
   );
 
-  // Auxiliar para identificar a categoria mais frequente
-  const getTopCategory = (categories: string[]) => {
-    if (!categories.length) return "Nenhuma";
+  // Auxiliar para identificar a categoria mais frequente (rótulo em PT).
+  const getTopCategory = (categories: Category[]) => {
+    if (!categories.length) return "—";
     const counts = categories.reduce(
       (acc, cat) => {
         acc[cat] = (acc[cat] || 0) + 1;
@@ -32,7 +33,10 @@ export function calculateReportStats(
       {} as Record<string, number>,
     );
 
-    return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    const top = Object.keys(counts).sort(
+      (a, b) => counts[b] - counts[a],
+    )[0] as Category;
+    return CATEGORY_LABELS[top];
   };
 
   // Turno mais produtivo baseado nos minutos
@@ -77,7 +81,10 @@ export function calculateReportStats(
     },
     topTaskCategory: getTopCategory(completedTasks.map((t) => t.category)),
     topGoalCategory: getTopCategory(completedGoals.map((g) => g.category)),
-    bestShift: topShift && topShift[1] > 0 ? topShift[0] : "Nenhum",
-    bestPeriod: bestPeriodKey,
+    bestShift: topShift && topShift[1] > 0 ? topShift[0] : "—",
+    bestPeriod:
+      bestPeriodKey && bestPeriodKey !== "Nenhum"
+        ? formatDateShort(bestPeriodKey)
+        : "—",
   };
 }

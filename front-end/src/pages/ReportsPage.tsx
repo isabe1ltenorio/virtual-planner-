@@ -160,7 +160,7 @@ export function ReportsPage() {
               label="Turno mais produtivo"
               value={stats.bestShift}
             />
-            <StatCard label="Melhor período" value={stats.bestPeriod} />
+            <StatCard label="Dia mais produtivo" value={stats.bestPeriod} />
             <StatCard
               label="Top categoria — tarefas"
               value={stats.topTaskCategory}
