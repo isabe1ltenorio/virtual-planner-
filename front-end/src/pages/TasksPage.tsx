@@ -100,7 +100,7 @@ export function TasksPage() {
     <>
       <PageHeader
         title="Tarefas"
-        subtitle="Suas atividades do dia a dia."
+        subtitle="O que você vai fazer — com horário ou turno, categoria e prioridade. Entram no relatório de produtividade."
         actions={
           <Link to="/tasks/new" className={buttonClass("primary")}>
             <Plus size={16} strokeWidth={2.5} />

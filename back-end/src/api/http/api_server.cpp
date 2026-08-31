@@ -31,6 +31,14 @@ ApiServer::ApiServer(const core::AppConfig& config,
 
 void ApiServer::register_limits()
 {
+    // O adapter PostgreSQL mantem UMA conexao pqxx compartilhada (ver
+    // PostgresDatabase). O pool de threads padrao do httplib deixaria duas
+    // requisicoes abrirem transacoes concorrentes na mesma conexao — libpqxx
+    // aborta com "Started new transaction while transaction was still active".
+    // Atender numa thread so serializa o acesso ao banco; para a carga deste
+    // projeto (um usuario, payloads pequenos) o custo e irrelevante.
+    server_.new_task_queue = [] { return new httplib::ThreadPool(1); };
+
     // Sem limite explicito o httplib aceita corpo de qualquer tamanho, e uma
     // unica requisicao consegue esgotar a memoria do processo. 1 MiB e folgado
     // para os payloads desta API, que sao objetos de dominio pequenos.

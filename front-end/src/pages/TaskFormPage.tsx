@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { FormEvent } from "react";
-import { useNavigate, useParams, Link } from "react-router";
+import { useNavigate, useParams, useSearchParams, Link } from "react-router";
 import type {
   Task,
   Category,
@@ -44,17 +44,23 @@ const fromTime = (v: string) => {
 
 export function TaskFormPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isEditing = Boolean(id);
   const [isLoading, setIsLoading] = useState(isEditing);
   const today = formatDateForInput();
 
+  // Pré-preenchimento quando o usuário clica num dia/horário na agenda.
+  const presetDate = searchParams.get("date");
+  const presetStart = Number(searchParams.get("start"));
+  const hasPresetStart = Number.isFinite(presetStart) && presetStart > 0;
+
   const [form, setForm] = useState<TaskFormData>({
     description: "",
     category: "Study",
-    date: today,
-    startMinutes: 480,
-    endMinutes: 540,
+    date: presetDate && presetDate >= today ? presetDate : today,
+    startMinutes: hasPresetStart ? presetStart : 480,
+    endMinutes: hasPresetStart ? presetStart + 60 : 540,
     priority: "Medium",
     status: "Pending",
   });
@@ -83,7 +89,9 @@ export function TaskFormPage() {
     e.preventDefault();
     setError(null);
 
-    if (form.date < today) {
+    // Só bloqueia data passada ao CRIAR. Ao editar, uma tarefa antiga precisa
+    // continuar salvável (mudar status, descrição etc.).
+    if (!isEditing && form.date < today) {
       setError("Não dá para agendar uma tarefa no passado.");
       return;
     }
@@ -92,6 +100,7 @@ export function TaskFormPage() {
       timeMode === "shift"
         ? {
             ...form,
+            shift: form.shift ?? "Morning",
             startMinutes: undefined,
             endMinutes: undefined,
           }
@@ -164,7 +173,7 @@ export function TaskFormPage() {
           <Field label="Data">
             <input
               type="date"
-              min={today}
+              min={isEditing ? undefined : today}
               value={form.date}
               onChange={(e) => set("date", e.target.value)}
               required

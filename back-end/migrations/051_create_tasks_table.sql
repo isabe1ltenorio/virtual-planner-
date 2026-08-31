@@ -1,16 +1,12 @@
--- Migration 051: Tabela de Tarefas
-CREATE TABLE IF NOT EXISTS tasks (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    description VARCHAR(255) NOT NULL,
-    category VARCHAR(50) NOT NULL,
-    task_date DATE NOT NULL,
-    start_minutes INTEGER,
-    end_minutes INTEGER,
-    priority VARCHAR(20) NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Migration 051: sem efeito -- mantida só para não quebrar a sequência de
+-- schema_migrations em bancos que já a registraram.
+--
+-- A tabela `tasks` é criada e mantida pela migration 030 (faixa 030-039), com
+-- o schema completo: id IDENTITY, user_id BIGINT, CHECKs de category/priority/
+-- status/time_slot e os índices idx_tasks_user_date / idx_tasks_status.
+--
+-- A versão anterior deste arquivo tentava recriar `tasks` com `CREATE TABLE IF
+-- NOT EXISTS` (no-op, pois a 030 já criou) e ainda criava índices redundantes.
+-- Removido para evitar divergência de schema.
 
-CREATE INDEX idx_tasks_user_id ON tasks(user_id);
-CREATE INDEX idx_tasks_date ON tasks(task_date);
+SELECT 1;

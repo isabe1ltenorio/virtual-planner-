@@ -31,7 +31,8 @@ public:
         persistence::ReminderRepository& repository);
 
     [[nodiscard]] std::uint64_t execute(
-        const CreateReminderRequest& request) const;
+        const CreateReminderRequest& request,
+        std::uint64_t user_id = 1) const;
 
 private:
     persistence::ReminderRepository& repository_;

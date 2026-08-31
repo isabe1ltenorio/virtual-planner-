@@ -12,9 +12,9 @@ UpdateReminderUseCase::UpdateReminderUseCase(
 }
 
 void UpdateReminderUseCase::execute(
-    const UpdateReminderRequest& request) const
+    const UpdateReminderRequest& request, std::uint64_t user_id) const
 {
-    const auto existing = repository_.find_by_id(request.id);
+    const auto existing = repository_.find_by_id(request.id, user_id);
 
     if (!existing.has_value())
     {
@@ -30,7 +30,7 @@ void UpdateReminderUseCase::execute(
         request.type,
         request.recurrence};
 
-    repository_.update(updated);
+    repository_.update(updated, user_id);
 }
 
 } // namespace virtual_planner::application

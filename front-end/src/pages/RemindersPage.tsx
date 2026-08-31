@@ -52,7 +52,7 @@ export function RemindersPage() {
     <>
       <PageHeader
         title="Lembretes"
-        subtitle="Avisos semanais, únicos ou recorrentes."
+        subtitle="Avisos pontuais — reunião, ligação, entrega… Únicos ou recorrentes, não entram no relatório de produtividade."
         actions={
           <Link to="/reminders/new" className={buttonClass("primary")}>
             <Plus size={16} strokeWidth={2.5} />

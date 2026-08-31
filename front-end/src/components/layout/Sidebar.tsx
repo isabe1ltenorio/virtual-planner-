@@ -1,5 +1,5 @@
-import type { FC } from "react";
-import { NavLink } from "react-router";
+import { useState, type FC } from "react";
+import { NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -9,9 +9,11 @@ import {
   BarChart3,
   Settings,
   User,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { Brand } from "../Brand";
+import { logout } from "../../lib/api/authApi";
 
 interface NavItem {
   to: string;
@@ -43,6 +45,21 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   ].join(" ");
 
 export const Sidebar: FC = () => {
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleLogout = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+    } catch {
+      // Mesmo se o POST falhar, o cookie de sessão pode já ter expirado;
+      // mandar para o login é o comportamento certo de qualquer forma.
+    } finally {
+      navigate("/login", { replace: true });
+    }
+  };
+
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border-c bg-surface p-3">
       <div className="px-2 py-3">
@@ -66,6 +83,16 @@ export const Sidebar: FC = () => {
           </NavLink>
         ))}
       </nav>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={signingOut}
+        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+      >
+        <LogOut size={18} strokeWidth={2} />
+        {signingOut ? "Saindo…" : "Sair"}
+      </button>
     </aside>
   );
 };

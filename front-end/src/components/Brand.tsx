@@ -1,16 +1,3 @@
-/**
- * Identidade visual do Taskly, num lugar só.
- *
- * TROCAR PELA SUA LOGO:
- *  - Tema claro:  front-end/public/logo.svg
- *  - Tema escuro: front-end/public/logo-tema-escuro.svg  (versão com o texto
- *    claro; a troca é automática pela classe .dark no <html>)
- *  Se for PNG, salve como .png e ajuste os src abaixo.
- *  `wordmark` false = o nome já vem na imagem. true = desenha "Taskly" ao lado
- *  (útil se sua logo for só o símbolo).
- *
- * `size` = altura da logo em px; a largura se ajusta sozinha.
- */
 export function Brand({
   size = 30,
   wordmark = false,

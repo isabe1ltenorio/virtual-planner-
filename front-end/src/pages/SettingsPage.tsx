@@ -3,7 +3,7 @@ import { PageHeader, Card } from "../components/ui";
 const INFO: { label: string; value: string }[] = [
   { label: "Aplicação", value: "Taskly" },
   { label: "Versão", value: "1.0.0" },
-  { label: "Armazenamento", value: "PostgreSQL / mock local" },
+  { label: "Armazenamento", value: "PostgreSQL" },
 ];
 
 export function SettingsPage() {

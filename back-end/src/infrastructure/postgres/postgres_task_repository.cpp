@@ -30,7 +30,8 @@ domain::Task task_from_row(const pqxx::row_ref& row)
             std::chrono::minutes{row["start_minutes"].as<std::int64_t>()},
             std::chrono::minutes{row["end_minutes"].as<std::int64_t>()}},
         domain::priority_from_string(row["priority"].as<std::string>()),
-        domain::task_status_from_string(row["status"].as<std::string>())};
+        domain::task_status_from_string(row["status"].as<std::string>()),
+        row["scheduled_by_shift"].as<bool>()};
 }
 
 } // namespace
@@ -58,9 +59,10 @@ std::uint64_t PostgresTaskRepository::save(const domain::Task& task,
                 start_minutes,
                 end_minutes,
                 priority,
-                status
+                status,
+                scheduled_by_shift
             )
-            VALUES ($1, $2, $3, make_date($4, $5, $6), $7, $8, $9, $10)
+            VALUES ($1, $2, $3, make_date($4, $5, $6), $7, $8, $9, $10, $11)
             RETURNING id
         )",
         pqxx::params{
@@ -74,7 +76,8 @@ std::uint64_t PostgresTaskRepository::save(const domain::Task& task,
             task.time_slot().start().count(),
             task.time_slot().end().count(),
             domain::to_string(task.priority()),
-            domain::to_string(task.status())});
+            domain::to_string(task.status()),
+            task.scheduled_by_shift()});
 
     const auto id = result.one_row()["id"].as<std::uint64_t>();
 
@@ -99,8 +102,9 @@ void PostgresTaskRepository::update(const domain::Task& task,
                 end_minutes = $7,
                 priority = $8,
                 status = $9,
+                scheduled_by_shift = $10,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $10 AND user_id = $11
+            WHERE id = $11 AND user_id = $12
         )",
         pqxx::params{
             transaction,
@@ -113,6 +117,7 @@ void PostgresTaskRepository::update(const domain::Task& task,
             task.time_slot().end().count(),
             domain::to_string(task.priority()),
             domain::to_string(task.status()),
+            task.scheduled_by_shift(),
             task.id(),
             user_id}).no_rows();
 
@@ -136,7 +141,8 @@ PostgresTaskRepository::find_by_id(std::uint64_t id, std::uint64_t user_id)
                 start_minutes,
                 end_minutes,
                 priority,
-                status
+                status,
+                scheduled_by_shift
             FROM tasks
             WHERE id = $1 AND user_id = $2
         )",
@@ -167,7 +173,8 @@ PostgresTaskRepository::find_all(std::uint64_t user_id)
                 start_minutes,
                 end_minutes,
                 priority,
-                status
+                status,
+                scheduled_by_shift
             FROM tasks
             WHERE user_id = $1
             ORDER BY id

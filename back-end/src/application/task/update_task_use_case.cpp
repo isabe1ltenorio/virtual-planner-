@@ -24,6 +24,7 @@ void UpdateTaskUseCase::execute(const UpdateTaskRequest& request,
     task->change_category(request.category);
     task->change_date(request.date);
     task->change_time_slot(request.time_slot);
+    task->set_scheduled_by_shift(request.scheduled_by_shift);
     task->change_priority(request.priority);
 
     repository_.update(*task, user_id);

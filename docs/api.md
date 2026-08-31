@@ -64,12 +64,16 @@ criar conta, abrir e encerrar sessão e ler o próprio perfil. Não há como lis
 usuários, editar nome ou e-mail, nem trocar senha pela API.
 
 `Goal`, `Task` e `Reminder` têm representação JSON **e** endpoints, todos na
-tabela acima.
+tabela acima. `User` é o caso invertido: tem representação JSON (seção
+[`User`](#user), P-29.4), mas nenhum endpoint próprio — o payload é usado por
+`GET /api/auth/me`.
 
 ## Onde está o código
 
 - Serialização compartilhada: `back-end/include/virtual_planner/api/json/shared_json.hpp`
   e `back-end/src/api/json/shared_json.cpp`
+- Serialização de `User`: `back-end/include/virtual_planner/api/json/user_json.hpp`
+  e `back-end/src/api/json/user_json.cpp`
 - Servidor: `back-end/include/virtual_planner/api/http/api_server.hpp` e
   `back-end/src/api/http/api_server.cpp`
 - Autenticação: `back-end/src/api/http/routes/auth_routes.cpp`
@@ -504,6 +508,59 @@ nlohmann::json to_json(const domain::TimeSlot& value);
 domain::TimeSlot time_slot_from_json(const nlohmann::json& value);
 ```
 
+## User
+
+A representação JSON de `User` é o perfil, e só o perfil: `id`, `name` e
+`email`. É o payload que `GET /api/auth/me` já devolve.
+
+Exemplo:
+
+```json
+{
+  "id": 42,
+  "name": "Alice",
+  "email": "alice@example.com"
+}
+```
+
+| Campo | Tipo JSON | Significado |
+|---|---|---|
+| `id` | inteiro sem sinal | Identificador do usuário. `0` é aceito e significa "ainda não persistido", como no corpo que `POST /api/auth/register` monta antes de o banco atribuir o id |
+| `name` | string | Nome de exibição. Não pode ser vazio nem só espaço em branco |
+| `email` | string | E-mail de perfil, validado por `domain::User` |
+
+Diferente de `Goal`, `Task` e `Reminder`, `User` não consome nenhuma conversão
+de P-29.0: o perfil não tem enum nem value object. A regra de `id` é a mesma das
+demais entidades — inteiro sem sinal, com `1.5`, `-1` e `"42"` rejeitados.
+
+O e-mail segue a validação de domínio, deliberadamente mínima: exatamente um
+`@`, parte local não vazia e domínio com um `.` que não seja o primeiro nem o
+último caractere. `alice@example` e `alice.example.com` são rejeitados;
+comprimento máximo, TLD conhecido e caracteres permitidos na parte local **não**
+são validados.
+
+### Credencial nunca entra neste payload
+
+Não há campo de senha na saída, e `domain::User` sequer guarda um: a credencial
+vive apenas na tabela `users` e sai do repositório por
+`find_credentials_by_email`, que devolve `persistence::UserCredentials` e nunca
+passa pela camada JSON.
+
+Na **entrada**, um objeto que traga `password`, `password_hash`, `senha` ou
+`credentials` é rejeitado com `400` e `code="validation_error"`. Ignorar o campo
+em silêncio faria o servidor responder sucesso a uma troca de senha que nunca
+aconteceu, e o cliente seguiria acreditando que a senha mudou. Não existe
+endpoint de troca de senha na API — ver "O que ainda não existe".
+
+Funções:
+
+```cpp
+nlohmann::json to_json(const domain::User& user);
+domain::User user_from_json(const nlohmann::json& value);
+```
+
+Declaradas em `back-end/include/virtual_planner/api/json/user_json.hpp`.
+
 ## Goal
 
 A representação JSON de `Goal` reutiliza as conversões compartilhadas de
@@ -669,6 +726,7 @@ Exemplo:
     "end": 540
   },
   "shift": "Morning",
+  "scheduled_by_shift": false,
   "priority": "High",
   "status": "Pending"
 }
@@ -682,14 +740,16 @@ Exemplo:
 | `date` | string | Data da tarefa, em ISO 8601 `YYYY-MM-DD` |
 | `time_slot` | objeto | `TimeSlot`, com `start` e `end` em minutos desde a meia-noite |
 | `shift` | string | `Shift` **derivado** de `time_slot.start`; ver abaixo |
+| `scheduled_by_shift` | booleano | Indica se o intervalo representa a janela de um turno |
 | `priority` | string | `Priority`, usando a representação compartilhada |
 | `status` | string | `TaskStatus`, usando a representação compartilhada |
 
 ### Agendamento: intervalo e turno
 
-`Task` tem **uma** forma de agendamento no domínio — o `time_slot`. O turno
-(`shift`) não é um campo da entidade: ele é **derivado** do início do
-`time_slot`, com os mesmos limites de `reporting::shift_of`:
+`Task` aceita horário exato (`time_slot`) ou turno (`shift`). Nos dois casos,
+o domínio guarda um intervalo; `scheduled_by_shift` preserva a forma escolhida.
+O rótulo de saída `shift` é derivado do início do intervalo, com os limites de
+`reporting::shift_of`:
 
 | `shift` | Faixa de `time_slot.start` |
 |---|---|
@@ -701,13 +761,14 @@ Regras do formato, para não haver ambiguidade sobre qual campo manda:
 
 - Na **saída** (`to_json`), `shift` está sempre presente e é sempre coerente com
   `time_slot`. É um rótulo de leitura; o `time_slot` é a fonte de verdade.
-- Na **entrada** (`task_from_json`), `time_slot` é obrigatório. `shift` é
-  opcional: se vier, precisa ser igual ao turno derivado de `time_slot`, senão
-  o payload é rejeitado com **400**. Nunca se usa `shift` para inferir horário.
-
-Um agendamento "por turno" — sem horário exato — depende de `Task` ter turno
-nativo (lacuna A da P-62 / #34, ainda não entregue). Enquanto isso, uma tarefa
-de manhã é simplesmente uma tarefa cujo `time_slot` começa antes das 12:00.
+- No **POST/PATCH**, `time_slot` escolhe horário exato; somente `shift` escolhe
+  turno. Se ambos vierem, `time_slot` prevalece e o turno deve ser coerente.
+  As janelas de turno são manhã 06:00–12:00, tarde 12:00–18:00 e noite
+  18:00–24:00. O cliente não define `scheduled_by_shift` nesses endpoints.
+- Na desserialização da entidade (`task_from_json`), o marcador booleano
+  `scheduled_by_shift` é preservado no round-trip. Quando verdadeiro junto
+  com `time_slot`, exige a janela completa do turno, evitando que um intervalo
+  arbitrário seja tratado como agendamento por turno.
 
 Funções:
 
@@ -764,17 +825,19 @@ Cria uma tarefa. Corpo:
 }
 ```
 
-Os cinco campos são obrigatórios. `id` não é aceito (é gerado pelo repositório)
-e `status` também não: toda tarefa nova nasce `"Pending"`. `shift` é derivado e
-não é lido na entrada. Um campo faltando, um valor de enum inválido, um
+Descrição, categoria, data, prioridade e um agendamento são obrigatórios.
+Para agendar por turno, substitua `time_slot` por `"shift": "Morning"`,
+`"Afternoon"` ou `"Evening"`. `id` é gerado pelo repositório e toda tarefa
+nova nasce `"Pending"`. Um campo faltando, um valor de enum inválido, um
 `time_slot` que viola as invariantes ou um JSON malformado respondem **400**.
 
 #### `PATCH /api/tasks/:id`
 
 Atualização parcial. Aceita qualquer subconjunto de `description`, `category`,
-`date`, `time_slot` e `priority`; os campos omitidos são preservados. `status`
-**não** é alterado por aqui — use `PATCH /api/tasks/:id/status`. `shift` no
-corpo é ignorado.
+`date`, `time_slot`, `shift` e `priority`; os campos omitidos são preservados.
+Enviar somente `shift` troca o agendamento para turno; enviar `time_slot`
+troca para horário exato. `status` **não** é alterado por aqui — use
+`PATCH /api/tasks/:id/status`.
 
 #### `PATCH /api/tasks/:id/status`
 

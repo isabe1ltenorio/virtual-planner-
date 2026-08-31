@@ -20,7 +20,10 @@ export function NotificationToggle() {
 
   if (state === "granted") {
     return (
-      <span className="icon-btn" title="Avisos de lembrete ativos">
+      <span
+        className="icon-btn"
+        title="Avisos de lembrete ativos (só enquanto esta aba estiver aberta)"
+      >
         <BellRing size={16} className="text-brand-600" />
       </span>
     );

@@ -102,7 +102,7 @@ ListRemindersUseCase::ListRemindersUseCase(
 }
 
 std::vector<ReminderOccurrence> ListRemindersUseCase::execute(
-    const ListRemindersRequest& request) const
+    const ListRemindersRequest& request, std::uint64_t user_id) const
 {
     if (request.start_date > request.end_date)
     {
@@ -114,7 +114,7 @@ std::vector<ReminderOccurrence> ListRemindersUseCase::execute(
     const Days window_end = to_system_days(request.end_date);
     std::vector<ReminderOccurrence> occurrences;
 
-    for (const auto& reminder : repository_.find_all())
+    for (const auto& reminder : repository_.find_all(user_id))
     {
         if (!matches_filters(reminder, request))
         {

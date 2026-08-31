@@ -144,13 +144,13 @@ export function ReportsPage() {
             <ProgressRow
               label="Metas cumpridas"
               value={stats.goals.percentage}
-              detail={`${stats.goals.completed} de ${stats.goals.total} metas`}
+              detail={`${stats.goals.completed} cumpridas + ${stats.goals.partial} parciais de ${stats.goals.total}`}
               color="#9333ea"
             />
             <ProgressRow
               label="Tarefas executadas"
               value={stats.tasks.percentage}
-              detail={`${stats.tasks.completed} de ${stats.tasks.total} tarefas`}
+              detail={`${stats.tasks.executed} executadas + ${stats.tasks.partial} parciais de ${stats.tasks.total}`}
               color="#10b981"
             />
           </Card>
@@ -160,7 +160,7 @@ export function ReportsPage() {
               label="Turno mais produtivo"
               value={stats.bestShift}
             />
-            <StatCard label="Melhor período" value={stats.bestPeriod} />
+            <StatCard label="Dia mais produtivo" value={stats.bestPeriod} />
             <StatCard
               label="Top categoria — tarefas"
               value={stats.topTaskCategory}
@@ -170,6 +170,27 @@ export function ReportsPage() {
               value={stats.topGoalCategory}
             />
           </div>
+
+          {stats.tasks.total > 0 && stats.bestShift !== "—" && (
+            <Card className="p-5 lg:col-span-2">
+              <p className="text-sm text-muted">
+                Você rende mais{" "}
+                <span className="font-semibold text-ink">
+                  {stats.bestShift.toLowerCase() === "manhã"
+                    ? "de manhã"
+                    : stats.bestShift.toLowerCase() === "tarde"
+                      ? "à tarde"
+                      : "à noite"}
+                </span>
+                . Tente reservar esse turno para as tarefas de maior
+                prioridade — e concentre os lembretes de{" "}
+                <span className="font-semibold text-ink">
+                  {stats.topTaskCategory}
+                </span>{" "}
+                nos horários em que costuma executá-las.
+              </p>
+            </Card>
+          )}
         </div>
       )}
     </>
