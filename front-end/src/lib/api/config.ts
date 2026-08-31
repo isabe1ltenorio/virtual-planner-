@@ -1,14 +1,13 @@
 // Configuração de acesso à API.
 //
-// `VITE_API_URL` decide se as telas falam com o backend ou com os mocks:
+// `VITE_API_URL` decide se as telas falam com o backend ou rodam offline:
 //
-//   - não definida  → mocks de `src/mocks/seed.ts` (padrão)
+//   - não definida  → sem backend; a sessão fica em branco (ver session.ts)
 //   - definida      → backend real, na base informada
 //
-// O padrão é mock de propósito. Só `Goal` tem endpoints hoje; `Task` e
-// `Reminder` continuam sem backend. Se a variável fosse obrigatória, quem
-// clonasse o repositório e rodasse `npm run dev` veria as telas quebradas sem
-// entender por quê.
+// Meta, Tarefa e Lembrete têm endpoints no backend. Se a variável fosse
+// obrigatória, quem clonasse o repositório e rodasse `npm run dev` veria as
+// telas quebradas sem entender por quê.
 //
 // A base INCLUI o prefixo `/api`; os caminhos do cliente são relativos a ela
 // (`/goals`, `/auth/login`). Repetir o prefixo dos dois lados produziria
