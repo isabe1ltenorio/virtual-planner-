@@ -100,7 +100,17 @@ export function DayTimeline({
       {timed.length === 0 &&
       shiftTasks.length === 0 &&
       looseTasks.length === 0 ? (
-        <p className="py-8 text-center text-sm text-subtle">Nada agendado.</p>
+        onEmptyClick ? (
+          <button
+            type="button"
+            onClick={() => onEmptyClick(9 * 60)}
+            className="w-full rounded-lg border border-dashed border-border-c py-8 text-center text-sm text-subtle transition-colors hover:border-brand-400 hover:text-muted"
+          >
+            Nada agendado — clique para criar uma tarefa
+          </button>
+        ) : (
+          <p className="py-8 text-center text-sm text-subtle">Nada agendado.</p>
+        )
       ) : (
         <div
           className="flex gap-3 overflow-y-auto pr-1"

@@ -127,6 +127,8 @@ export function DashboardPage() {
     dayTasks.length > 0
       ? Math.round(((executed + partial * 0.5) / dayTasks.length) * 100)
       : 0;
+  // Dia futuro ou sem tarefas: não há o que medir, mostra "—" em vez de 0%.
+  const productivityKnown = dayTasks.length > 0 && selectedDate <= today;
 
   // Pendentes/adiadas de dias passados: some do "hoje" mas continuam devendo.
   const overdue = useMemo(
@@ -235,6 +237,9 @@ export function DashboardPage() {
 
   if (isLoading) return <LoadingState label="Carregando seu dia…" />;
 
+  const isEmpty =
+    tasks.length === 0 && goals.length === 0 && occurrences.length === 0;
+
   return (
     <>
       <PageHeader
@@ -251,6 +256,27 @@ export function DashboardPage() {
           </Link>
         }
       />
+
+      {isEmpty && (
+        <Card className="p-6 text-center">
+          <p className="text-sm font-medium text-ink">
+            Tudo pronto para começar.
+          </p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+            Crie sua primeira <strong>meta</strong> ou <strong>tarefa</strong> e
+            o resumo do dia começa a ganhar forma.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Link to="/tasks/new" className={buttonClass("primary")}>
+              <Plus size={16} strokeWidth={2.5} />
+              Nova tarefa
+            </Link>
+            <Link to="/goals/new" className={buttonClass("outline")}>
+              Nova meta
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
@@ -325,13 +351,13 @@ export function DashboardPage() {
             Produtividade de {dayLabel}
           </span>
           <span className="stat-value text-lg font-semibold text-ink">
-            {productivity}%
+            {productivityKnown ? `${productivity}%` : "—"}
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
           <div
             className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
-            style={{ width: `${productivity}%` }}
+            style={{ width: `${productivityKnown ? productivity : 0}%` }}
           />
         </div>
       </Card>

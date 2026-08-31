@@ -144,13 +144,13 @@ export function ReportsPage() {
             <ProgressRow
               label="Metas cumpridas"
               value={stats.goals.percentage}
-              detail={`${stats.goals.completed} de ${stats.goals.total} metas`}
+              detail={`${stats.goals.completed} cumpridas + ${stats.goals.partial} parciais de ${stats.goals.total}`}
               color="#9333ea"
             />
             <ProgressRow
               label="Tarefas executadas"
               value={stats.tasks.percentage}
-              detail={`${stats.tasks.completed} de ${stats.tasks.total} tarefas`}
+              detail={`${stats.tasks.executed} executadas + ${stats.tasks.partial} parciais de ${stats.tasks.total}`}
               color="#10b981"
             />
           </Card>

@@ -41,7 +41,18 @@ export function MiniCalendar({ value, onChange, marked }: MiniCalendarProps) {
         <span className="text-sm font-semibold text-ink">
           {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </span>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="mr-1 rounded-md px-2 py-1 text-xs font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            onClick={() => {
+              const now = new Date();
+              setViewMonth(startOfMonth(now));
+              onChange(formatDateForInput(now));
+            }}
+          >
+            Hoje
+          </button>
           <button
             type="button"
             aria-label="Mês anterior"

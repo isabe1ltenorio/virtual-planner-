@@ -75,7 +75,7 @@ export function LoginPage() {
             <p className="mt-0.5 text-sm text-muted">
               {isRegistering
                 ? "Leva menos de um minuto."
-                : "Bem-vinda de volta."}
+                : "Bem-vindo de volta."}
             </p>
           </div>
 

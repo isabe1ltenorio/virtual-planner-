@@ -89,7 +89,9 @@ export function TaskFormPage() {
     e.preventDefault();
     setError(null);
 
-    if (form.date < today) {
+    // Só bloqueia data passada ao CRIAR. Ao editar, uma tarefa antiga precisa
+    // continuar salvável (mudar status, descrição etc.).
+    if (!isEditing && form.date < today) {
       setError("Não dá para agendar uma tarefa no passado.");
       return;
     }
@@ -170,7 +172,7 @@ export function TaskFormPage() {
           <Field label="Data">
             <input
               type="date"
-              min={today}
+              min={isEditing ? undefined : today}
               value={form.date}
               onChange={(e) => set("date", e.target.value)}
               required

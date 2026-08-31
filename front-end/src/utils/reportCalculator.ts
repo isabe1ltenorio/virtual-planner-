@@ -2,25 +2,30 @@ import type { Task, Goal, Category } from "../types/domain";
 import { CATEGORY_LABELS, formatDateShort } from "../lib/formatters";
 
 export interface ReportStats {
-  tasks: { total: number; completed: number; percentage: number };
-  goals: { total: number; completed: number; percentage: number };
+  // percentage = (executadas + parciais·0,5) / total — mesma fórmula do
+  // Dashboard e do relatório do backend.
+  tasks: { total: number; executed: number; partial: number; percentage: number };
+  goals: { total: number; completed: number; partial: number; percentage: number };
   topTaskCategory: string;
   topGoalCategory: string;
   bestShift: string;
   bestPeriod: string;
 }
 
+const pct = (score: number, total: number) =>
+  total > 0 ? Math.round((score / total) * 100) : 0;
+
 export function calculateReportStats(
   tasks: Task[],
   goals: Goal[],
 ): ReportStats {
-  const completedTasks = tasks.filter((t) =>
-    ["Executed", "PartiallyExecuted"].includes(t.status),
-  );
+  const executedTasks = tasks.filter((t) => t.status === "Executed");
+  const partialTasks = tasks.filter((t) => t.status === "PartiallyExecuted");
+  const completedTasks = [...executedTasks, ...partialTasks];
 
-  const completedGoals = goals.filter((g) =>
-    ["Completed", "Partially Completed"].includes(g.status),
-  );
+  const completedGoalsFull = goals.filter((g) => g.status === "Completed");
+  const partialGoals = goals.filter((g) => g.status === "Partially Completed");
+  const completedGoals = [...completedGoalsFull, ...partialGoals];
 
   // Auxiliar para identificar a categoria mais frequente (rótulo em PT).
   const getTopCategory = (categories: Category[]) => {
@@ -67,17 +72,18 @@ export function calculateReportStats(
   return {
     tasks: {
       total: tasks.length,
-      completed: completedTasks.length,
-      percentage: tasks.length
-        ? Math.round((completedTasks.length / tasks.length) * 100)
-        : 0,
+      executed: executedTasks.length,
+      partial: partialTasks.length,
+      percentage: pct(executedTasks.length + partialTasks.length * 0.5, tasks.length),
     },
     goals: {
       total: goals.length,
-      completed: completedGoals.length,
-      percentage: goals.length
-        ? Math.round((completedGoals.length / goals.length) * 100)
-        : 0,
+      completed: completedGoalsFull.length,
+      partial: partialGoals.length,
+      percentage: pct(
+        completedGoalsFull.length + partialGoals.length * 0.5,
+        goals.length,
+      ),
     },
     topTaskCategory: getTopCategory(completedTasks.map((t) => t.category)),
     topGoalCategory: getTopCategory(completedGoals.map((g) => g.category)),
