@@ -59,7 +59,7 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   Pending: "Pendente",
-  Executed: "Concluída",
+  Executed: "Executada",
   PartiallyExecuted: "Parcial",
   Cancelled: "Cancelada",
   Postponed: "Adiada",

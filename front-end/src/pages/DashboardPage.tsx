@@ -237,7 +237,7 @@ export function DashboardPage() {
           icon={<Clock size={16} />}
         />
         <StatCard
-          label="Concluídas"
+          label="Executadas"
           value={executed}
           icon={<CheckCircle2 size={16} />}
         />
