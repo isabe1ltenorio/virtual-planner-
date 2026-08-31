@@ -11,7 +11,7 @@ CreateReminderUseCase::CreateReminderUseCase(
 }
 
 std::uint64_t CreateReminderUseCase::execute(
-    const CreateReminderRequest& request) const
+    const CreateReminderRequest& request, std::uint64_t user_id) const
 {
     // O id que o repositorio devolve e o unico id valido. Nao ha mais guarda
     // de id duplicado porque nao ha mais como duplicar: save so insere
@@ -26,7 +26,7 @@ std::uint64_t CreateReminderUseCase::execute(
         request.type,
         request.recurrence};
 
-    return repository_.save(reminder);
+    return repository_.save(reminder, user_id);
 }
 
 } // namespace virtual_planner::application

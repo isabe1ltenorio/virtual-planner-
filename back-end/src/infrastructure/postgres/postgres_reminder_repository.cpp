@@ -10,8 +10,6 @@ namespace virtual_planner::infrastructure::postgres {
 
 namespace {
 
-constexpr std::uint64_t kSingleTenantUserId{1};
-
 domain::Reminder reminder_from_row(const pqxx::row_ref& row)
 {
     return domain::Reminder{
@@ -45,7 +43,7 @@ PostgresReminderRepository::PostgresReminderRepository(
 // O id vem da identity da tabela (migration 041), nao do chamador: save so
 // insere e devolve o id gerado, como PostgresGoalRepository::save.
 std::uint64_t PostgresReminderRepository::save(
-    const domain::Reminder& reminder)
+    const domain::Reminder& reminder, std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -67,7 +65,7 @@ std::uint64_t PostgresReminderRepository::save(
         )",
         pqxx::params{
             transaction,
-            kSingleTenantUserId,
+            user_id,
             reminder.description(),
             domain::to_string(reminder.category()),
             reminder.date().year(),
@@ -86,7 +84,7 @@ std::uint64_t PostgresReminderRepository::save(
 }
 
 void PostgresReminderRepository::update(
-    const domain::Reminder& reminder)
+    const domain::Reminder& reminder, std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
@@ -116,13 +114,13 @@ void PostgresReminderRepository::update(
             domain::to_string(reminder.type()),
             domain::to_string(reminder.recurrence()),
             reminder.id(),
-            kSingleTenantUserId}).no_rows();
+            user_id}).no_rows();
 
     transaction.commit();
 }
 
 std::optional<domain::Reminder>
-PostgresReminderRepository::find_by_id(std::uint64_t id)
+PostgresReminderRepository::find_by_id(std::uint64_t id, std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(database_.connection());
 
@@ -142,7 +140,7 @@ PostgresReminderRepository::find_by_id(std::uint64_t id)
             FROM reminders
             WHERE id = $1 AND user_id = $2
         )",
-        pqxx::params{transaction, id, kSingleTenantUserId});
+        pqxx::params{transaction, id, user_id});
 
     if (result.empty())
     {
@@ -153,7 +151,7 @@ PostgresReminderRepository::find_by_id(std::uint64_t id)
 }
 
 std::vector<domain::Reminder>
-PostgresReminderRepository::find_all()
+PostgresReminderRepository::find_all(std::uint64_t user_id)
 {
     pqxx::read_transaction transaction(database_.connection());
 
@@ -174,7 +172,7 @@ PostgresReminderRepository::find_all()
             WHERE user_id = $1
             ORDER BY id
         )",
-        pqxx::params{transaction, kSingleTenantUserId});
+        pqxx::params{transaction, user_id});
 
     std::vector<domain::Reminder> reminders;
     reminders.reserve(result.size());
@@ -187,13 +185,13 @@ PostgresReminderRepository::find_all()
     return reminders;
 }
 
-void PostgresReminderRepository::remove(std::uint64_t id)
+void PostgresReminderRepository::remove(std::uint64_t id, std::uint64_t user_id)
 {
     pqxx::work transaction(database_.connection());
 
     transaction.exec(
         "DELETE FROM reminders WHERE id = $1 AND user_id = $2",
-        pqxx::params{transaction, id, kSingleTenantUserId}).no_rows();
+        pqxx::params{transaction, id, user_id}).no_rows();
 
     transaction.commit();
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -32,7 +33,8 @@ public:
         persistence::ReminderRepository& repository);
 
     [[nodiscard]] std::vector<ReminderOccurrence> execute(
-        const ListRemindersRequest& request) const;
+        const ListRemindersRequest& request,
+        std::uint64_t user_id = 1) const;
 
 private:
     persistence::ReminderRepository& repository_;

@@ -16,16 +16,21 @@ public:
     explicit PostgresReminderRepository(
         PostgresDatabase& database);
 
-    std::uint64_t save(const domain::Reminder& reminder) override;
+    std::uint64_t save(const domain::Reminder& reminder,
+                       std::uint64_t user_id = 1) override;
 
-    void update(const domain::Reminder& reminder) override;
+    void update(const domain::Reminder& reminder,
+                std::uint64_t user_id = 1) override;
 
     std::optional<domain::Reminder> find_by_id(
-        std::uint64_t id) override;
+        std::uint64_t id,
+        std::uint64_t user_id = 1) override;
 
-    std::vector<domain::Reminder> find_all() override;
+    std::vector<domain::Reminder> find_all(
+        std::uint64_t user_id = 1) override;
 
-    void remove(std::uint64_t id) override;
+    void remove(std::uint64_t id,
+                std::uint64_t user_id = 1) override;
 
 private:
     PostgresDatabase& database_;

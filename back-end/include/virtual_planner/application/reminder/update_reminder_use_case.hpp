@@ -29,7 +29,8 @@ public:
     explicit UpdateReminderUseCase(
         persistence::ReminderRepository& repository);
 
-    void execute(const UpdateReminderRequest& request) const;
+    void execute(const UpdateReminderRequest& request,
+                 std::uint64_t user_id = 1) const;
 
 private:
     persistence::ReminderRepository& repository_;

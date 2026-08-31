@@ -142,9 +142,10 @@ persistence::ReminderRepository& require_repository(
 
 domain::Reminder find_created_or_updated(
     persistence::ReminderRepository& repository,
-    std::uint64_t id)
+    std::uint64_t id,
+    std::uint64_t user_id)
 {
-    const auto reminder = repository.find_by_id(id);
+    const auto reminder = repository.find_by_id(id, user_id);
 
     if (!reminder.has_value())
     {
@@ -155,6 +156,22 @@ domain::Reminder find_created_or_updated(
     return *reminder;
 }
 
+// Dono da requisicao. O gate de autenticacao ja respondeu 401 a quem nao tem
+// sessao valida; chegar aqui sem identidade seria defeito de programacao.
+// Espelha goal_routes.cpp.
+std::uint64_t caller_id(const ApiServer& api, const httplib::Request& request)
+{
+    const auto user_id = api.authenticated_user_id(request);
+
+    if (!user_id.has_value())
+    {
+        throw std::logic_error(
+            "Reminder route reached without an authenticated caller.");
+    }
+
+    return *user_id;
+}
+
 } // namespace
 
 void register_reminder_routes(ApiServer& api)
@@ -163,12 +180,12 @@ void register_reminder_routes(ApiServer& api)
 
     api.server().Get(
         "/api/reminders",
-        [reminders](const httplib::Request& request,
-                    httplib::Response& response) {
+        [&api, reminders](const httplib::Request& request,
+                          httplib::Response& response) {
             application::ListRemindersUseCase list_reminders{
                 require_repository(reminders)};
             const auto occurrences = list_reminders.execute(
-                list_request_from(request));
+                list_request_from(request), caller_id(api, request));
             nlohmann::json body = nlohmann::json::array();
 
             for (const auto& occurrence : occurrences)
@@ -181,18 +198,20 @@ void register_reminder_routes(ApiServer& api)
 
     api.server().Post(
         "/api/reminders",
-        [reminders](const httplib::Request& request,
-                    httplib::Response& response) {
+        [&api, reminders](const httplib::Request& request,
+                          httplib::Response& response) {
             auto& repository = require_repository(reminders);
+            const std::uint64_t user_id = caller_id(api, request);
             const domain::Reminder parsed = reminder_request_from(request, 0);
             application::CreateReminderUseCase create_reminder{repository};
             const std::uint64_t id = create_reminder.execute(
                 application::CreateReminderRequest{
                     parsed.description(), parsed.category(), parsed.date(),
-                    parsed.time_slot(), parsed.type(), parsed.recurrence()});
+                    parsed.time_slot(), parsed.type(), parsed.recurrence()},
+                user_id);
 
             set_reminder_response(
-                response, find_created_or_updated(repository, id), 201);
+                response, find_created_or_updated(repository, id, user_id), 201);
         });
 
     const char* const reminder_by_id =
@@ -200,10 +219,11 @@ void register_reminder_routes(ApiServer& api)
 
     api.server().Get(
         reminder_by_id,
-        [reminders](const httplib::Request& request,
-                    httplib::Response& response) {
+        [&api, reminders](const httplib::Request& request,
+                          httplib::Response& response) {
             auto& repository = require_repository(reminders);
-            const auto reminder = repository.find_by_id(path_id_from(request));
+            const auto reminder = repository.find_by_id(
+                path_id_from(request), caller_id(api, request));
 
             // Diferente de find_created_or_updated: aqui o id vem do usuario,
             // entao nao existir e 404, e nao defeito interno.
@@ -217,28 +237,31 @@ void register_reminder_routes(ApiServer& api)
 
     api.server().Put(
         reminder_by_id,
-        [reminders](const httplib::Request& request,
-                    httplib::Response& response) {
+        [&api, reminders](const httplib::Request& request,
+                          httplib::Response& response) {
             auto& repository = require_repository(reminders);
+            const std::uint64_t user_id = caller_id(api, request);
             const std::uint64_t id = path_id_from(request);
             const domain::Reminder parsed = reminder_request_from(request, id);
             application::UpdateReminderUseCase update_reminder{repository};
 
             update_reminder.execute(application::UpdateReminderRequest{
                 id, parsed.description(), parsed.category(), parsed.date(),
-                parsed.time_slot(), parsed.type(), parsed.recurrence()});
+                parsed.time_slot(), parsed.type(), parsed.recurrence()},
+                user_id);
 
             set_reminder_response(
-                response, find_created_or_updated(repository, id), 200);
+                response, find_created_or_updated(repository, id, user_id), 200);
         });
 
     api.server().Delete(
         reminder_by_id,
-        [reminders](const httplib::Request& request,
-                    httplib::Response& response) {
+        [&api, reminders](const httplib::Request& request,
+                          httplib::Response& response) {
             application::DeleteReminderUseCase delete_reminder{
                 require_repository(reminders)};
-            delete_reminder.execute(path_id_from(request));
+            delete_reminder.execute(
+                path_id_from(request), caller_id(api, request));
             response.status = 204;
         });
 }
