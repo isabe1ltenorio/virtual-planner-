@@ -36,25 +36,16 @@ import {
   StatCard,
 } from "../components/ui";
 import { MiniCalendar } from "../components/MiniCalendar";
-import { StatusMenu } from "../components/StatusMenu";
+import { DayTimeline } from "../components/DayTimeline";
 import { buttonClass } from "../components/buttonStyles";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
 const STATUSES = Object.keys(TASK_STATUS_LABELS) as TaskStatus[];
 type RangeDays = 14 | 30;
 
-// Cores de eixo/grade lidas do design system uma vez no mount.
-function useChartTheme() {
-  const [c, setC] = useState({ grid: "#e5e7eb", axis: "#9ca3af" });
-  useEffect(() => {
-    const s = getComputedStyle(document.documentElement);
-    setC({
-      grid: s.getPropertyValue("--border-c").trim() || "#e5e7eb",
-      axis: s.getPropertyValue("--text-subtle").trim() || "#9ca3af",
-    });
-  }, []);
-  return c;
-}
+// Neutros que funcionam nos dois temas (slate-400 com alfa na grade).
+const CHART_GRID = "rgba(148,163,184,0.25)";
+const CHART_AXIS = "#94a3b8";
 
 function addDays(base: Date, n: number): Date {
   const d = new Date(base);
@@ -70,7 +61,6 @@ export function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(formatDateForInput());
   const [range, setRange] = useState<RangeDays>(14);
 
-  const chart = useChartTheme();
   const today = formatDateForInput();
 
   useEffect(() => {
@@ -342,18 +332,18 @@ export function DashboardPage() {
                       <stop offset="100%" stopColor="#9333ea" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke={chart.grid} vertical={false} />
+                  <CartesianGrid stroke={CHART_GRID} vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: chart.axis }}
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
                     interval="preserveStartEnd"
                     minTickGap={24}
-                    axisLine={{ stroke: chart.grid }}
+                    axisLine={{ stroke: CHART_GRID }}
                     tickLine={false}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: chart.axis }}
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
                     axisLine={false}
                     tickLine={false}
                     width={28}
@@ -386,19 +376,19 @@ export function DashboardPage() {
                   layout="vertical"
                   margin={{ left: 8, right: 16 }}
                 >
-                  <CartesianGrid stroke={chart.grid} horizontal={false} />
+                  <CartesianGrid stroke={CHART_GRID} horizontal={false} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: chart.axis }}
-                    axisLine={{ stroke: chart.grid }}
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
+                    axisLine={{ stroke: CHART_GRID }}
                     tickLine={false}
                   />
                   <YAxis
                     type="category"
                     dataKey="name"
                     width={92}
-                    tick={{ fontSize: 11, fill: chart.axis }}
+                    tick={{ fontSize: 11, fill: CHART_AXIS }}
                     axisLine={false}
                     tickLine={false}
                   />
@@ -413,40 +403,41 @@ export function DashboardPage() {
 
           <Card className="p-5">
             <h2 className="mb-4 text-sm font-semibold text-ink">
-              Tarefas de {dayLabel}
+              Agenda de {dayLabel}
             </h2>
-            {dayTasks.length === 0 ? (
-              <p className="py-8 text-center text-sm text-subtle">
-                Nada agendado.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border-c">
-                {dayTasks.map((task) => (
-                  <li
-                    key={task.id}
-                    className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
-                  >
-                    <span
-                      className="h-8 w-1 shrink-0 rounded-full"
-                      style={{ background: CATEGORY_COLORS[task.category] }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-ink">
-                        {task.description}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {CATEGORY_LABELS[task.category]}
-                        {task.startMinutes != null &&
-                          ` · ${formatMinutesToTime(task.startMinutes)}`}
-                      </p>
-                    </div>
-                    <StatusMenu
-                      value={task.status}
-                      onChange={(next) => handleStatus(task.id, next)}
-                    />
-                  </li>
-                ))}
-              </ul>
+            <DayTimeline tasks={dayTasks} onStatusChange={handleStatus} />
+
+            {dayReminders.length > 0 && (
+              <div className="mt-4 border-t border-border-c pt-3">
+                <p className="mb-2 text-xs font-medium text-subtle">
+                  Lembretes
+                </p>
+                <ul className="space-y-2">
+                  {dayReminders
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        a.reminder.startMinutes - b.reminder.startMinutes,
+                    )
+                    .map((o) => (
+                      <li
+                        key={`${o.reminder.id}-${o.date}`}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />
+                        <span className="tabular-nums text-xs text-muted">
+                          {formatMinutesToTime(o.reminder.startMinutes)}
+                        </span>
+                        <span className="truncate text-ink">
+                          {o.reminder.description}
+                        </span>
+                        <span className="ml-auto shrink-0 text-xs text-subtle">
+                          {REMINDER_TYPE_LABELS[o.reminder.type]}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
             )}
           </Card>
         </div>
