@@ -129,7 +129,28 @@ domain::Task task_from_json(const nlohmann::json& value)
         throw std::invalid_argument("Task must be a JSON object.");
     }
 
-    const TaskSchedule schedule = task_schedule_from_json(value);
+    TaskSchedule schedule = task_schedule_from_json(value);
+    if (value.contains("time_slot") && value.contains("scheduled_by_shift"))
+    {
+        const auto& marker = value.at("scheduled_by_shift");
+        if (!marker.is_boolean())
+        {
+            throw std::invalid_argument(
+                "Task field \"scheduled_by_shift\" must be a boolean.");
+        }
+        schedule.scheduled_by_shift = marker.get<bool>();
+        if (schedule.scheduled_by_shift)
+        {
+            const auto window = domain::shift_window(
+                application::reporting::shift_of(schedule.time_slot));
+            if (schedule.time_slot.start() != window.start() ||
+                schedule.time_slot.end() != window.end())
+            {
+                throw std::invalid_argument(
+                    "A by-shift Task must use the complete shift window.");
+            }
+        }
+    }
 
     return domain::Task{
         read_id(value),

@@ -179,6 +179,13 @@ int main()
                   "a by-shift task should report scheduled_by_shift=true");
         VP_EXPECT(reserialized.at("shift") == "Afternoon",
                   "the derived shift should match the requested one");
+
+        const domain::Task round_tripped = api::json::task_from_json(reserialized);
+        VP_EXPECT(round_tripped.scheduled_by_shift(),
+                  "a by-shift task should preserve its scheduling mode after a round trip");
+        VP_EXPECT(round_tripped.time_slot().start() == parsed.time_slot().start() &&
+                      round_tripped.time_slot().end() == parsed.time_slot().end(),
+                  "a by-shift task should preserve its window after a round trip");
     }
 
     // --- task_from_json: erros de payload ---------------------------
@@ -195,6 +202,21 @@ int main()
 
         nlohmann::json missing_status = base;
         missing_status.erase("status");
+
+        nlohmann::json invalid_marker = base;
+        invalid_marker["scheduled_by_shift"] = "true";
+
+        nlohmann::json incomplete_shift = base;
+        incomplete_shift["scheduled_by_shift"] = true;
+
+        VP_EXPECT(throws_invalid_argument([&invalid_marker] {
+                      return api::json::task_from_json(invalid_marker);
+                  }),
+                  "scheduled_by_shift must be a boolean");
+        VP_EXPECT(throws_invalid_argument([&incomplete_shift] {
+                      return api::json::task_from_json(incomplete_shift);
+                  }),
+                  "a by-shift task must cover the complete shift window");
 
         VP_EXPECT(throws_invalid_argument([&missing_time_slot] {
                       return api::json::task_from_json(missing_time_slot);
