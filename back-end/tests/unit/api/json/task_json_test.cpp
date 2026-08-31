@@ -98,6 +98,8 @@ int main()
                   "time_slot.end should be minutes from midnight");
         VP_EXPECT(serialized.at("shift") == "Morning",
                   "shift should be derived and present on output");
+        VP_EXPECT(serialized.at("scheduled_by_shift") == false,
+                  "a task scheduled by time_slot should report scheduled_by_shift=false");
         VP_EXPECT(serialized.at("priority") == "High",
                   "priority should serialize");
         VP_EXPECT(serialized.at("status") == "Pending",
@@ -156,6 +158,29 @@ int main()
                   "a shift that contradicts time_slot should be rejected");
     }
 
+    // --- task_from_json: agendamento por turno ("shift" sem "time_slot") --
+    {
+        nlohmann::json payload = api::json::to_json(make_task(
+            domain::TimeSlot{std::chrono::hours{9}, std::chrono::hours{10}}));
+        payload.erase("time_slot");
+        payload["shift"] = "Afternoon";
+
+        const domain::Task parsed = api::json::task_from_json(payload);
+
+        VP_EXPECT(parsed.scheduled_by_shift(),
+                  "a payload with shift and no time_slot should be by-shift");
+        VP_EXPECT(parsed.time_slot().start() == std::chrono::hours{12},
+                  "a by-shift task should take the shift window start");
+        VP_EXPECT(parsed.time_slot().end() == std::chrono::hours{18},
+                  "a by-shift task should take the shift window end");
+
+        const nlohmann::json reserialized = api::json::to_json(parsed);
+        VP_EXPECT(reserialized.at("scheduled_by_shift") == true,
+                  "a by-shift task should report scheduled_by_shift=true");
+        VP_EXPECT(reserialized.at("shift") == "Afternoon",
+                  "the derived shift should match the requested one");
+    }
+
     // --- task_from_json: erros de payload ---------------------------
     {
         const nlohmann::json base = api::json::to_json(make_task(
@@ -163,6 +188,7 @@ int main()
 
         nlohmann::json missing_time_slot = base;
         missing_time_slot.erase("time_slot");
+        missing_time_slot.erase("shift");
 
         nlohmann::json string_id = base;
         string_id["id"] = "7";
@@ -173,7 +199,7 @@ int main()
         VP_EXPECT(throws_invalid_argument([&missing_time_slot] {
                       return api::json::task_from_json(missing_time_slot);
                   }),
-                  "a Task without time_slot should be rejected");
+                  "a Task without time_slot nor shift should be rejected");
         VP_EXPECT(throws_invalid_argument([&string_id] {
                       return api::json::task_from_json(string_id);
                   }),

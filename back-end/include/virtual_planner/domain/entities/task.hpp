@@ -21,7 +21,11 @@ public:
         Date date,
         TimeSlot time_slot,
         Priority priority,
-        TaskStatus status
+        TaskStatus status,
+        // Quando true, a tarefa foi agendada por TURNO: o time_slot acima é a
+        // janela do turno (domain::shift_window), não um horário escolhido.
+        // O turno em si continua sendo derivado de time_slot.start().
+        bool scheduled_by_shift = false
     );
 
     [[nodiscard]] std::uint64_t id() const;
@@ -33,6 +37,8 @@ public:
     [[nodiscard]] Date date() const;
 
     [[nodiscard]] TimeSlot time_slot() const;
+
+    [[nodiscard]] bool scheduled_by_shift() const;
 
     [[nodiscard]] Priority priority() const;
 
@@ -56,6 +62,8 @@ public:
 
     void change_time_slot(TimeSlot time_slot);
 
+    void set_scheduled_by_shift(bool scheduled_by_shift);
+
     void change_priority(Priority priority);
 
 private:
@@ -68,6 +76,8 @@ private:
     Date date_;
 
     TimeSlot time_slot_;
+
+    bool scheduled_by_shift_;
 
     Priority priority_;
 

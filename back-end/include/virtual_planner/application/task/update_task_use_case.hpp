@@ -21,6 +21,8 @@ struct UpdateTaskRequest
     domain::Date date;
     domain::TimeSlot time_slot;
     domain::Priority priority;
+    // true = agendada por turno; time_slot é a janela do turno.
+    bool scheduled_by_shift{false};
 };
 
 class UpdateTaskUseCase

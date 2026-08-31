@@ -1,17 +1,9 @@
 import type { Shift, Task } from "../../types/domain";
 import { request } from "./httpClient";
 
-// O backend fala `time_slot: { start, end }` em minutos; as telas usam
-// `startMinutes` / `endMinutes`. O mapeamento fica aqui, como em goalsApi.
-
-// Janela padrão que uma tarefa de turno ocupa quando o backend ainda não tem
-// coluna `shift` (persistência real de turno é um passo à parte). Manhã 6-12,
-// tarde 12-18, noite 18-24; o backend deriva o turno do início do time_slot.
-const SHIFT_WINDOW: Record<Shift, { start: number; end: number }> = {
-  Morning: { start: 6 * 60, end: 12 * 60 },
-  Afternoon: { start: 12 * 60, end: 18 * 60 },
-  Evening: { start: 18 * 60, end: 24 * 60 },
-};
+// O backend aceita agendar por HORÁRIO (`time_slot: { start, end }` em minutos)
+// ou por TURNO (`shift`), e responde `scheduled_by_shift` dizendo qual foi.
+// As telas usam `startMinutes` / `endMinutes` / `shift`. O mapeamento fica aqui.
 
 interface TaskWire {
   id: number;
@@ -20,32 +12,41 @@ interface TaskWire {
   date: string;
   time_slot: { start: number; end: number };
   shift?: Shift;
+  scheduled_by_shift: boolean;
   priority: Task["priority"];
   status: Task["status"];
 }
 
 function fromWire(wire: TaskWire): Task {
-  return {
+  const base = {
     id: wire.id,
     description: wire.description,
     category: wire.category,
     date: wire.date,
-    startMinutes: wire.time_slot.start,
-    endMinutes: wire.time_slot.end,
-    shift: wire.shift,
     priority: wire.priority,
     status: wire.status,
   };
+
+  if (wire.scheduled_by_shift) {
+    // Tarefa de turno: a tela mostra o turno, não o horário sintético.
+    return { ...base, shift: wire.shift };
+  }
+  return {
+    ...base,
+    startMinutes: wire.time_slot.start,
+    endMinutes: wire.time_slot.end,
+  };
 }
 
-function timeSlotOf(data: Partial<Task>): { start: number; end: number } | undefined {
+// Monta o campo de agendamento do corpo: horário se houver, senão turno.
+function scheduleBody(data: Partial<Task>): Record<string, unknown> {
   if (data.startMinutes != null && data.endMinutes != null) {
-    return { start: data.startMinutes, end: data.endMinutes };
+    return { time_slot: { start: data.startMinutes, end: data.endMinutes } };
   }
   if (data.shift) {
-    return SHIFT_WINDOW[data.shift];
+    return { shift: data.shift };
   }
-  return undefined;
+  throw new Error("Informe um horário ou um turno para a tarefa.");
 }
 
 export async function listTasks(date?: string): Promise<Task[]> {
@@ -59,11 +60,6 @@ export async function getTaskById(id: number): Promise<Task> {
 }
 
 export async function createTask(data: Omit<Task, "id">): Promise<Task> {
-  const time_slot = timeSlotOf(data);
-  if (!time_slot) {
-    throw new Error("Informe um horário ou um turno para a tarefa.");
-  }
-
   // `status` não vai no POST: o caso de uso define o inicial (Pendente).
   const wire = await request<TaskWire>("/tasks", {
     method: "POST",
@@ -71,8 +67,8 @@ export async function createTask(data: Omit<Task, "id">): Promise<Task> {
       description: data.description,
       category: data.category,
       date: data.date,
-      time_slot,
       priority: data.priority,
+      ...scheduleBody(data),
     },
   });
   return fromWire(wire);
@@ -85,9 +81,10 @@ export async function updateTask(
   const { status, startMinutes, endMinutes, shift, color, ...rest } = updates;
   void color;
 
-  const time_slot = timeSlotOf({ startMinutes, endMinutes, shift });
   const data: Record<string, unknown> = { ...rest };
-  if (time_slot) data.time_slot = time_slot;
+  if (startMinutes != null || endMinutes != null || shift) {
+    Object.assign(data, scheduleBody({ startMinutes, endMinutes, shift }));
+  }
 
   let wire: TaskWire | undefined;
 

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "support/expect.hpp"
+#include "virtual_planner/domain/enums/shift.hpp"
 #include "virtual_planner/persistence/memory/in_memory_task_repository.hpp"
 
 using namespace virtual_planner;
@@ -30,6 +31,25 @@ domain::Task task(std::uint64_t id,
         domain::TimeSlot{start, end},
         domain::Priority::Medium,
         status};
+}
+
+// Tarefa agendada por turno: o time_slot e a janela do turno e
+// scheduled_by_shift fica true. Ocupa a faixa inteira para efeito de conflito.
+domain::Task shift_task(std::uint64_t id,
+                        domain::Date date,
+                        domain::Shift shift)
+{
+    const domain::TimeSlot window = domain::shift_window(shift);
+
+    return domain::Task{
+        id,
+        "Shift task " + std::to_string(id),
+        domain::Category::Work,
+        date,
+        window,
+        domain::Priority::Medium,
+        domain::TaskStatus::Pending,
+        true};
 }
 
 } // namespace
@@ -117,6 +137,27 @@ int main()
 
         VP_EXPECT(service.conflicts_on(day, kOwner).empty(),
                   "cancelled and postponed tasks should not raise conflicts");
+    }
+
+    // --- Tarefa por turno ocupa a faixa inteira -------------------------
+    {
+        persistence::InMemoryTaskRepository repo;
+        // Manha = [06:00, 12:00).
+        repo.save(shift_task(1, day, domain::Shift::Morning), kOwner);
+        repo.save(task(2, day, std::chrono::hours{8}, std::chrono::hours{9}),
+                  kOwner);
+        // Tarde: fora da janela da manha.
+        repo.save(task(3, day, std::chrono::hours{15}, std::chrono::hours{16}),
+                  kOwner);
+
+        application::TaskConflictService service(repo);
+        const auto conflicts = service.conflicts_on(day, kOwner);
+
+        VP_EXPECT(conflicts.size() == 1,
+                  "a shift task should conflict with any task inside its window");
+        VP_EXPECT(conflicts.front().first.id() == 1 &&
+                      conflicts.front().second.id() == 2,
+                  "the conflict should pair the shift task with the timed one");
     }
 
     // --- Tres tarefas mutuamente sobrepostas -> tres pares ---------------

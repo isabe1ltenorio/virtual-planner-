@@ -94,13 +94,15 @@ application::CreateTaskRequest create_task_request_from(
     const httplib::Request& request)
 {
     const auto body = parse_json_body(request);
+    const json::TaskSchedule schedule = json::task_schedule_from_json(body);
 
     return application::CreateTaskRequest{
         read_string_field(body, "description"),
         json::category_from_json(required_field(body, "category")),
         json::date_from_json(required_field(body, "date")),
-        json::time_slot_from_json(required_field(body, "time_slot")),
-        json::priority_from_json(required_field(body, "priority"))};
+        schedule.time_slot,
+        json::priority_from_json(required_field(body, "priority")),
+        schedule.scheduled_by_shift};
 }
 
 application::UpdateTaskRequest update_task_request_from(
@@ -113,6 +115,7 @@ application::UpdateTaskRequest update_task_request_from(
     domain::Category category = current.category();
     domain::Date date = current.date();
     domain::TimeSlot time_slot = current.time_slot();
+    bool scheduled_by_shift = current.scheduled_by_shift();
     domain::Priority priority = current.priority();
 
     if (body.contains("description"))
@@ -138,9 +141,12 @@ application::UpdateTaskRequest update_task_request_from(
         date = json::date_from_json(body.at("date"));
     }
 
-    if (body.contains("time_slot"))
+    // "time_slot" ou "shift": se qualquer um vier, resolve o novo agendamento;
+    // se nenhum vier, mantém o atual.
+    if (const auto schedule = json::task_schedule_patch_from_json(body))
     {
-        time_slot = json::time_slot_from_json(body.at("time_slot"));
+        time_slot = schedule->time_slot;
+        scheduled_by_shift = schedule->scheduled_by_shift;
     }
 
     if (body.contains("priority"))
@@ -149,7 +155,8 @@ application::UpdateTaskRequest update_task_request_from(
     }
 
     return application::UpdateTaskRequest{
-        current.id(), description, category, date, time_slot, priority};
+        current.id(), description, category, date, time_slot, priority,
+        scheduled_by_shift};
 }
 
 application::ChangeTaskStatusRequest change_task_status_request_from(

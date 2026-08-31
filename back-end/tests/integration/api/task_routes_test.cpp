@@ -246,7 +246,31 @@ int main()
             created_id = body.at("id").get<std::uint64_t>();
         }
 
-        // --- POST invalido: falta time_slot -> 400 ------------------
+        // --- POST agendando por TURNO -> 201 ------------------------
+        {
+            const nlohmann::json payload{
+                {"description", "Estudar de tarde"},
+                {"category", "Study"},
+                {"date", "2026-08-15"},
+                {"shift", "Afternoon"},
+                {"priority", "Medium"},
+            };
+
+            const auto created = client.Post("/api/tasks", payload.dump(),
+                                             "application/json");
+            VP_EXPECT(created->status == 201,
+                      "a task scheduled by shift should be created with 201");
+
+            const auto body = nlohmann::json::parse(created->body);
+            VP_EXPECT(body.at("scheduled_by_shift") == true,
+                      "a by-shift task should report scheduled_by_shift=true");
+            VP_EXPECT(body.at("shift") == "Afternoon",
+                      "the derived shift should match the requested one");
+            VP_EXPECT(body.at("time_slot").at("start") == 12 * 60,
+                      "a by-shift task should store the shift window");
+        }
+
+        // --- POST invalido: sem time_slot nem shift -> 400 ------------
         {
             const nlohmann::json payload{
                 {"description", "Sem horario"},

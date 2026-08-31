@@ -50,7 +50,60 @@ std::string read_description(const nlohmann::json& value)
     return description.get<std::string>();
 }
 
+// Confere que um "shift" declarado no corpo bate com o turno derivado do
+// time_slot, para o formato nao ficar ambiguo sobre qual campo manda.
+void check_shift_matches(const nlohmann::json& value,
+                         const domain::TimeSlot& time_slot)
+{
+    if (!value.contains("shift"))
+    {
+        return;
+    }
+
+    const domain::Shift declared = shift_from_json(value.at("shift"));
+    const domain::Shift derived =
+        application::reporting::shift_of(time_slot);
+
+    if (declared != derived)
+    {
+        throw std::invalid_argument(
+            "Task field \"shift\" is inconsistent with \"time_slot\"; "
+            "shift is derived from time_slot and must not contradict it.");
+    }
+}
+
 } // namespace
+
+TaskSchedule task_schedule_from_json(const nlohmann::json& body)
+{
+    if (body.contains("time_slot"))
+    {
+        const domain::TimeSlot time_slot =
+            time_slot_from_json(body.at("time_slot"));
+        check_shift_matches(body, time_slot);
+        return TaskSchedule{time_slot, false};
+    }
+
+    if (body.contains("shift"))
+    {
+        const domain::Shift shift = shift_from_json(body.at("shift"));
+        return TaskSchedule{domain::shift_window(shift), true};
+    }
+
+    throw std::invalid_argument(
+        "Task requires either \"time_slot\" or \"shift\".");
+}
+
+std::optional<TaskSchedule> task_schedule_patch_from_json(
+    const nlohmann::json& body)
+{
+    if (!body.contains("time_slot") && !body.contains("shift"))
+    {
+        return std::nullopt;
+    }
+
+    return task_schedule_from_json(body);
+}
 
 nlohmann::json to_json(const domain::Task& task)
 {
@@ -62,6 +115,8 @@ nlohmann::json to_json(const domain::Task& task)
         {"time_slot", to_json(task.time_slot())},
         // Derivado, somente leitura: o turno em que o TimeSlot comeca.
         {"shift", to_json(application::reporting::shift_of(task.time_slot()))},
+        // true quando a tarefa foi agendada por turno (time_slot e a janela).
+        {"scheduled_by_shift", task.scheduled_by_shift()},
         {"priority", to_json(task.priority())},
         {"status", to_json(task.status())},
     };
@@ -74,34 +129,17 @@ domain::Task task_from_json(const nlohmann::json& value)
         throw std::invalid_argument("Task must be a JSON object.");
     }
 
-    const domain::TimeSlot time_slot =
-        time_slot_from_json(required_field(value, "time_slot"));
-
-    // "shift" e derivado de time_slot. Aceita ausente; se presente, tem que
-    // bater com o turno derivado, para o formato nao ficar ambiguo sobre qual
-    // campo manda.
-    if (value.contains("shift"))
-    {
-        const domain::Shift declared = shift_from_json(value.at("shift"));
-        const domain::Shift derived =
-            application::reporting::shift_of(time_slot);
-
-        if (declared != derived)
-        {
-            throw std::invalid_argument(
-                "Task field \"shift\" is inconsistent with \"time_slot\"; "
-                "shift is derived from time_slot and must not contradict it.");
-        }
-    }
+    const TaskSchedule schedule = task_schedule_from_json(value);
 
     return domain::Task{
         read_id(value),
         read_description(value),
         category_from_json(required_field(value, "category")),
         date_from_json(required_field(value, "date")),
-        time_slot,
+        schedule.time_slot,
         priority_from_json(required_field(value, "priority")),
         task_status_from_json(required_field(value, "status")),
+        schedule.scheduled_by_shift,
     };
 }
 

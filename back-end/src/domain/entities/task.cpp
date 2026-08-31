@@ -28,13 +28,15 @@ Task::Task(
     Date date,
     TimeSlot time_slot,
     Priority priority,
-    TaskStatus status
+    TaskStatus status,
+    bool scheduled_by_shift
 )
     : id_(id),
       description_(std::move(description)),
       category_(category),
       date_(date),
       time_slot_(time_slot),
+      scheduled_by_shift_(scheduled_by_shift),
       priority_(priority),
       status_(status)
 {
@@ -66,6 +68,11 @@ TimeSlot Task::time_slot() const
     return time_slot_;
 }
 
+bool Task::scheduled_by_shift() const
+{
+    return scheduled_by_shift_;
+}
+
 Priority Task::priority() const
 {
     return priority_;
@@ -95,6 +102,11 @@ void Task::change_date(Date date)
 void Task::change_time_slot(TimeSlot time_slot)
 {
     time_slot_ = time_slot;
+}
+
+void Task::set_scheduled_by_shift(bool scheduled_by_shift)
+{
+    scheduled_by_shift_ = scheduled_by_shift;
 }
 
 void Task::change_priority(Priority priority)

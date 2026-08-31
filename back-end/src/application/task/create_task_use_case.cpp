@@ -22,7 +22,8 @@ std::uint64_t CreateTaskUseCase::execute(const CreateTaskRequest& request,
         request.date,
         request.time_slot,
         request.priority,
-        domain::TaskStatus::Pending);
+        domain::TaskStatus::Pending,
+        request.scheduled_by_shift);
 
     return repository_.save(task, user_id);
 }

@@ -18,6 +18,8 @@ struct CreateTaskRequest
     domain::Date date;
     domain::TimeSlot time_slot;
     domain::Priority priority;
+    // true = agendada por turno; time_slot é a janela do turno.
+    bool scheduled_by_shift{false};
 };
 
 // Cria uma Task nova, sempre com status Pending, e devolve o id gerado pelo

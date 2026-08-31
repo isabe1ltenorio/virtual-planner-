@@ -37,7 +37,8 @@ public:
                 task.date(),
                 task.time_slot(),
                 task.priority(),
-                task.status()}});
+                task.status(),
+                task.scheduled_by_shift()}});
 
         return id;
     }
