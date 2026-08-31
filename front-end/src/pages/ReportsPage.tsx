@@ -170,6 +170,27 @@ export function ReportsPage() {
               value={stats.topGoalCategory}
             />
           </div>
+
+          {stats.tasks.total > 0 && stats.bestShift !== "—" && (
+            <Card className="p-5 lg:col-span-2">
+              <p className="text-sm text-muted">
+                Você rende mais{" "}
+                <span className="font-semibold text-ink">
+                  {stats.bestShift.toLowerCase() === "manhã"
+                    ? "de manhã"
+                    : stats.bestShift.toLowerCase() === "tarde"
+                      ? "à tarde"
+                      : "à noite"}
+                </span>
+                . Tente reservar esse turno para as tarefas de maior
+                prioridade — e concentre os lembretes de{" "}
+                <span className="font-semibold text-ink">
+                  {stats.topTaskCategory}
+                </span>{" "}
+                nos horários em que costuma executá-las.
+              </p>
+            </Card>
+          )}
         </div>
       )}
     </>

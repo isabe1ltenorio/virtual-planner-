@@ -7,7 +7,15 @@ import {
   SHIFT_LABELS,
   formatMinutesToTime,
 } from "../lib/formatters";
+import type { Shift } from "../types/domain";
 import { StatusMenu } from "./StatusMenu";
+
+// Espelha domain::shift_window do backend.
+const SHIFT_WINDOW: Record<Shift, { start: number; end: number }> = {
+  Morning: { start: 6 * 60, end: 12 * 60 },
+  Afternoon: { start: 12 * 60, end: 18 * 60 },
+  Evening: { start: 18 * 60, end: 24 * 60 },
+};
 
 interface DayTimelineProps {
   tasks: Task[]; // já filtradas para o dia
@@ -48,20 +56,35 @@ export function DayTimeline({
     () => tasks.filter((t) => t.startMinutes != null),
     [tasks],
   );
-  const untimed = useMemo(
-    () => tasks.filter((t) => t.startMinutes == null),
+  // Tarefas por turno: viram uma faixa larga na janela do turno.
+  const shiftTasks = useMemo(
+    () => tasks.filter((t) => t.startMinutes == null && t.shift),
+    [tasks],
+  );
+  // Sem horário nem turno (não deveria acontecer, mas é defensivo).
+  const looseTasks = useMemo(
+    () => tasks.filter((t) => t.startMinutes == null && !t.shift),
     [tasks],
   );
 
   const { start, end } = useMemo(() => {
-    if (timed.length === 0) return { start: 8 * HOUR, end: 18 * HOUR };
-    const min = Math.min(...timed.map((t) => t.startMinutes ?? 0));
-    const max = Math.max(...timed.map((t) => t.endMinutes ?? 0));
+    const starts: number[] = [];
+    const ends: number[] = [];
+    timed.forEach((t) => {
+      starts.push(t.startMinutes ?? 0);
+      ends.push(t.endMinutes ?? 0);
+    });
+    shiftTasks.forEach((t) => {
+      const w = SHIFT_WINDOW[t.shift as Shift];
+      starts.push(w.start);
+      ends.push(w.end);
+    });
+    if (starts.length === 0) return { start: 8 * HOUR, end: 18 * HOUR };
     return {
-      start: Math.max(0, Math.floor(min / HOUR) * HOUR - HOUR),
-      end: Math.min(24 * HOUR, Math.ceil(max / HOUR) * HOUR + HOUR),
+      start: Math.max(0, Math.floor(Math.min(...starts) / HOUR) * HOUR - HOUR),
+      end: Math.min(24 * HOUR, Math.ceil(Math.max(...ends) / HOUR) * HOUR + HOUR),
     };
-  }, [timed]);
+  }, [timed, shiftTasks]);
 
   const hours = useMemo(() => {
     const list: number[] = [];
@@ -74,7 +97,9 @@ export function DayTimeline({
 
   return (
     <div>
-      {timed.length === 0 && untimed.length === 0 ? (
+      {timed.length === 0 &&
+      shiftTasks.length === 0 &&
+      looseTasks.length === 0 ? (
         <p className="py-8 text-center text-sm text-subtle">Nada agendado.</p>
       ) : (
         <div
@@ -114,6 +139,45 @@ export function DayTimeline({
                 style={{ top: (m - start) * PX_PER_MIN }}
               />
             ))}
+
+            {/* Faixas de turno: ocupam a janela inteira do turno, atrás dos blocos */}
+            {shiftTasks.map((task, i) => {
+              const w = SHIFT_WINDOW[task.shift as Shift];
+              const color = CATEGORY_COLORS[task.category];
+              return (
+                <div
+                  key={task.id}
+                  className="absolute overflow-hidden rounded-md border border-dashed px-2 py-1 text-xs"
+                  style={{
+                    top: (w.start - start) * PX_PER_MIN,
+                    height: (w.end - w.start) * PX_PER_MIN - 3,
+                    left: 4 + i * 8,
+                    right: 4,
+                    borderColor: color,
+                    background: `color-mix(in srgb, ${color} 7%, var(--surface))`,
+                  }}
+                >
+                  <Link
+                    to={`/tasks/${task.id}/edit`}
+                    className="block truncate font-medium text-ink hover:underline"
+                  >
+                    {task.description}
+                  </Link>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
+                    <span>{SHIFT_LABELS[task.shift as Shift]}</span>
+                    <span className="truncate">
+                      · {CATEGORY_LABELS[task.category]}
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    <StatusMenu
+                      value={task.status}
+                      onChange={(next) => onStatusChange(task.id, next)}
+                    />
+                  </div>
+                </div>
+              );
+            })}
 
             {placed.map(({ task, lane }) => {
               const s = task.startMinutes ?? start;
@@ -163,12 +227,12 @@ export function DayTimeline({
         </div>
       )}
 
-      {/* Sem horário: turno ou lembretes */}
-      {untimed.length > 0 && (
+      {/* Sem horário nem turno */}
+      {looseTasks.length > 0 && (
         <div className="mt-4 border-t border-border-c pt-3">
-          <p className="mb-2 text-xs font-medium text-subtle">Sem horário fixo</p>
+          <p className="mb-2 text-xs font-medium text-subtle">Sem horário</p>
           <ul className="space-y-2">
-            {untimed.map((task) => (
+            {looseTasks.map((task) => (
               <li key={task.id} className="flex items-center gap-3 text-sm">
                 <span
                   className="h-6 w-1 shrink-0 rounded-full"
@@ -180,7 +244,6 @@ export function DayTimeline({
                   </p>
                   <p className="text-xs text-muted">
                     {CATEGORY_LABELS[task.category]}
-                    {task.shift && ` · ${SHIFT_LABELS[task.shift]}`}
                   </p>
                 </div>
                 <StatusMenu
